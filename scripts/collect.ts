@@ -74,11 +74,44 @@ async function metaDescription(url: string): Promise<string> {
   }
 }
 
-function keep(feed: Feed, item: Item): boolean {
-  if (feed.company !== 'OpenAI') return true;
-  const tags = [...(item.categories ?? []), item.link ?? ''].join(' ');
-  return /engineering|research|security|safety/i.test(tags);
+// Layer 1: tier the sources. Dedicated engineering feeds are trusted; general company
+// blogs (product launches, marketing, company news in the same feed) are mixed and must
+// earn their way in via the scorer below. Precision over recall: a dropped good post
+// costs nothing, a leaked marketing post costs trust.
+const MIXED = new Set(['OpenAI', 'Stripe', 'Cloudflare', 'Discord', 'Figma', 'Google', 'Hugging Face', 'Nvidia', 'Twilio', 'Docker', 'HashiCorp', 'Tailscale', 'PlanetScale', 'Supabase', 'Sentry', 'Duolingo', 'AWS News', 'Auth0', 'Cloudera', 'Confluent', 'Databricks', 'Elastic', 'Grafana Labs', 'Heroku', 'HubSpot', 'Okta', 'Postman', 'Red Hat', 'Salesforce', 'Stack Overflow', 'Timescale', 'Zapier', 'Zoom', 'eBay']);
+
+// Layer 2: deterministic scorer. Hard-block obvious non-posts for every feed, then score
+// title/categories/url/code/depth. Mixed feeds need a clear technical score; trusted
+// feeds only fall if they are marketing-heavy with no technical signal at all.
+const HARD_BLOCK = /\b(webinar|white ?paper|e-?book|customer stor\w*|case stud\w*|press release|we'?re hiring|now hiring|join us at|acqui(?:res?|sition)|funding round|named (?:a |the )?leader|magic quadrant|book a demo|register now|remarks|keynote|fireside chat)\b/i;
+const MARKETING = /\b(announc\w*|introduc\w*|launch\w*|now available|generally available|new features?|product updates?|pricing|partners?\w*|integrat\w+ with|market\w*|industry|trends?|survey|customers?|business|growth|event|conference|summit|meetup|podcast|celebrat\w*|award\w*|roadmap)\b/i;
+const TECH = /\b(how we|we (?:built|migrated|scaled|reduced|cut|designed|rewrote|shipped)|scaling|scaled|latency|throughput|p99|architecture|distributed|infrastructure|database|postgres|mysql|kafka|kubernetes|performance|optimi[sz]\w*|benchmark\w*|postmortem|outage|reliability|observability|debugging|memory|compiler|runtime|kernel|network\w*|sharding|replication|caching|migration|migrat\w*|internals|inference|training|open source|security|encryption|zero downtime|tracing|profiling|storage|failover|switchover|post-quantum|cryptography|dns|tls|quic|spark|redis|grpc|oauth|load shedding|cascading|embedding|retrieval|tokenization)\b/i;
+const GENERIC = /^(how to|getting started|introduction to|a (?:beginner'?s )?guide to|top \d+|best \w+|what is|\d+ (?:things|ways|tips|reasons|steps)\b|five (?:things|ways|tips|reasons|steps)\b)|\b(tutorial|quick guide|beginner'?s guide|faq)\b/i;
+
+function keep(feed: Feed, item: Item, raw: string, words: number): boolean {
+  const title = item.title ?? '';
+  const cats = (item.categories ?? []).join(' ');
+  if (HARD_BLOCK.test(`${title} ${cats}`)) return false;
+  if (MIXED.has(feed.company) && GENERIC.test(title) && !/^how we\b/i.test(title)) return false;
+  let score = 0;
+  // Category/url bonus only counts for mixed feeds: on a trusted feed every post shares the same category, so it proves nothing.
+  if (MIXED.has(feed.company) && /engineering|research|architecture|infrastructure|reliability|security/i.test(`${cats} ${item.link ?? ''}`)) score += 3;
+  if (MIXED.has(feed.company) && /\b(product|announcements?|company|news|events?|customers?|press|partners?)\b/i.test(cats)) score -= 4;
+  if (TECH.test(title)) score += 2;
+  if (/<(pre|code)[\s>]/i.test(raw)) score += 3;
+  if (MARKETING.test(title)) score -= 4;
+  if (GENERIC.test(title) && !/^how we\b/i.test(title)) score -= 3;
+  if (words >= 800) score += 1;
+  else if (words > 0 && words < 250) score -= 1;
+  // Mixed feeds additionally need a technical title: categories/code alone let product guides through.
+  if (MIXED.has(feed.company)) return TECH.test(title) && score >= 3;
+  return score >= -1;
 }
+
+// Self-check: marketing from a mixed feed drops, a production deep-dive passes, fluff from a trusted feed drops.
+console.assert(!keep({ company: 'Stripe', url: '' }, { title: 'Announcing new pricing plans for our customers', categories: ['Product'] } as Item, '', 100));
+console.assert(keep({ company: 'Stripe', url: '' }, { title: 'How we migrated Postgres with zero downtime', categories: ['Engineering'] } as Item, '<pre>code</pre>', 1500));
+console.assert(!keep({ company: 'Netflix', url: '' }, { title: 'Announcing our annual customer summit event', categories: [] } as Item, '', 100));
 
 // Anthropic's engineering page has no feed; post titles and dates are embedded as JSON in the Next.js payload.
 async function collectAnthropic(feed: Feed): Promise<Article[]> {
@@ -93,7 +126,7 @@ async function collectAnthropic(feed: Feed): Promise<Article[]> {
     const title = after.match(/"title":"((?:[^"\\]|\\.)*)"/)?.[1];
     const summary = after.match(/"summary":"((?:[^"\\]|\\.)*)"/)?.[1] ?? '';
     const time = Date.parse(date ?? '');
-    if (!title || !time || time < cutoff) continue;
+    if (!title || !time || time < cutoff || HARD_BLOCK.test(title)) continue;
     const url = new URL(path, feed.url).href;
     out.push({ id: createHash('sha1').update(url).digest('hex').slice(0, 10), company: feed.company, title: decode(title).trim(), url, date: new Date(time).toISOString(), excerpt: excerptOf(decode(summary.replace(/\\n/g, ' '))) });
   }
@@ -104,11 +137,14 @@ async function collect(feed: Feed): Promise<Article[]> {
   if (feed.company === 'Anthropic') return collectAnthropic(feed);
   const parsed = await parser.parseString(await get(feed.url));
   const out: Article[] = [];
+  let dropped = 0;
   for (const item of parsed.items) {
     const time = Date.parse(item.isoDate ?? item.pubDate ?? '');
-    if (!item.link || !item.title || !time || time < cutoff || !keep(feed, item)) continue;
-    const full = toText(item['content:encoded'] ?? item.content ?? '');
+    if (!item.link || !item.title || !time || time < cutoff) continue;
+    const raw = item['content:encoded'] ?? item.content ?? '';
+    const full = toText(raw);
     const words = full ? full.split(' ').length : 0;
+    if (!keep(feed, item, raw, words)) { dropped++; continue; }
     const summary = proseFrom(item.content ?? item.summary ?? item['content:encoded'] ?? '') || toText(item.contentSnippet ?? '') || full;
     out.push({
       id: createHash('sha1').update(item.link).digest('hex').slice(0, 10),
@@ -120,6 +156,7 @@ async function collect(feed: Feed): Promise<Article[]> {
       ...(words > 300 && { readMins: Math.max(1, Math.round(words / 230)) }),
     });
   }
+  if (dropped) console.log(`drop  ${feed.company.padEnd(16)} ${dropped} non-technical`);
   return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, MAX_PER_COMPANY);
 }
 

@@ -66,13 +66,12 @@
   { "company": "Snap", "url": "https://eng.snap.com/feed" },
   { "company": "Squarespace", "url": "https://engineering.squarespace.com/blog?format=rss" },
   { "company": "Stack Overflow", "url": "https://stackoverflow.blog/engineering/feed/" },
-  { "company": "ThoughtWorks", "url": "https://www.thoughtworks.com/rss/insights.xml" },
   { "company": "Thumbtack", "url": "https://medium.com/feed/thumbtack-engineering" },
   { "company": "Timescale", "url": "https://www.timescale.com/blog/rss/" },
-  { "company": "Toptal", "url": "https://www.toptal.com/developers/blog.rss" },
   { "company": "Yelp", "url": "https://engineeringblog.yelp.com/feed.xml" },
   { "company": "Zapier", "url": "https://zapier.com/engineering/feed/" },
   { "company": "Zendesk", "url": "https://zendesk.engineering/feed" },
   { "company": "Zoom", "url": "https://developers.zoom.us/blog/rss.xml" },
-  { "company": "eBay", "url": "https://innovation.ebayinc.com/stories/rss/" }
+  { "company": "eBay", "url": "https://innovation.ebayinc.com/stories/rss/" },
+  { "company": "The Daily Diff", "url": "https://tdd.cat/rss.xml" }
 ]
