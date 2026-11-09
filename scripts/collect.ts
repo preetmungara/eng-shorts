@@ -113,6 +113,122 @@ console.assert(!keep({ company: 'Stripe', url: '' }, { title: 'Announcing new pr
 console.assert(keep({ company: 'Stripe', url: '' }, { title: 'How we migrated Postgres with zero downtime', categories: ['Engineering'] } as Item, '<pre>code</pre>', 1500));
 console.assert(!keep({ company: 'Netflix', url: '' }, { title: 'Announcing our annual customer summit event', categories: [] } as Item, '', 100));
 
+const FAME_MIN = 20;
+const HN_SEARCH = 'https://hn.algolia.com/api/v1/search';
+
+function urlKey(url: string): string {
+  try {
+    const u = new URL(url);
+    return (u.hostname.replace(/^www\./, '') + u.pathname.replace(/\/+$/, '')).toLowerCase();
+  } catch {
+    return url.toLowerCase();
+  }
+}
+
+function sitesOf(articles: Article[]): string[] {
+  const companiesByHost = new Map<string, Set<string>>();
+  const rows: { host: string; segment: string }[] = [];
+  for (const a of articles) {
+    let host = '';
+    let segment = '';
+    try {
+      const u = new URL(a.url);
+      host = u.hostname.replace(/^www\./, '');
+      segment = (u.pathname.split('/').filter(Boolean)[0] ?? '').toLowerCase();
+    } catch {
+      continue;
+    }
+    const companies = companiesByHost.get(host) ?? new Set<string>();
+    companies.add(a.company);
+    companiesByHost.set(host, companies);
+    rows.push({ host, segment });
+  }
+  const sites = new Set<string>();
+  for (const { host, segment } of rows) {
+    const shared = (companiesByHost.get(host)?.size ?? 0) > 1;
+    sites.add(shared && segment ? `${host} ${segment}` : host);
+  }
+  return [...sites].sort();
+}
+
+async function hnHits(site: string, sinceUnix: number): Promise<Map<string, number>> {
+  const q = new URLSearchParams({
+    tags: 'story',
+    restrictSearchableAttributes: 'url',
+    query: site,
+    numericFilters: `created_at_i>${sinceUnix}`,
+    hitsPerPage: '1000',
+  });
+  const body = JSON.parse(await get(`${HN_SEARCH}?${q}`)) as { nbHits?: number; hits?: { url?: string; points?: number }[] };
+  const hits = Array.isArray(body.hits) ? body.hits : [];
+  const nbHits = typeof body.nbHits === 'number' ? body.nbHits : hits.length;
+  if (nbHits > hits.length) console.log(`partial ${site} ${hits.length} of ${nbHits}`);
+  const points = new Map<string, number>();
+  for (const hit of hits) {
+    if (!hit.url) continue;
+    const n = typeof hit.points === 'number' ? hit.points : 0;
+    const key = urlKey(hit.url);
+    points.set(key, Math.max(points.get(key) ?? 0, n));
+  }
+  return points;
+}
+
+async function fame(articles: Article[]): Promise<Map<string, number>> {
+  const since = Math.floor(cutoff / 1000);
+  const settled = await Promise.allSettled(sitesOf(articles).map(async (site) => {
+    try {
+      return await hnHits(site, since);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`${site} ${message}`);
+    }
+  }));
+  const points = new Map<string, number>();
+  for (const r of settled) {
+    if (r.status === 'rejected') {
+      const message = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      console.warn(`skip  fame ${message}`);
+      continue;
+    }
+    for (const [key, n] of r.value) points.set(key, Math.max(points.get(key) ?? 0, n));
+  }
+  for (const [key, n] of points) if (n < FAME_MIN) points.delete(key);
+  return points;
+}
+
+function rankCatalog(articles: Article[], points: Map<string, number>): Article[] {
+  const ranked = articles.map((a) => {
+    const n = points.get(urlKey(a.url));
+    return {
+      id: a.id,
+      company: a.company,
+      title: a.title,
+      url: a.url,
+      date: a.date,
+      excerpt: a.excerpt,
+      ...(a.readMins !== undefined && { readMins: a.readMins }),
+      ...(n !== undefined && n >= FAME_MIN && { hnPoints: n }),
+    };
+  });
+  ranked.sort((a, b) => {
+    const pa = a.hnPoints ?? 0;
+    const pb = b.hnPoints ?? 0;
+    if (pa !== pb) return pa > pb ? -1 : 1;
+    if (a.date !== b.date) return a.date > b.date ? -1 : 1;
+    if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+    return 0;
+  });
+  const kept: Article[] = [];
+  const perCompany = new Map<string, number>();
+  for (const a of ranked) {
+    const n = perCompany.get(a.company) ?? 0;
+    if (n >= MAX_PER_COMPANY) continue;
+    perCompany.set(a.company, n + 1);
+    kept.push(a);
+  }
+  return kept;
+}
+
 // Anthropic's engineering page has no feed; post titles and dates are embedded as JSON in the Next.js payload.
 async function collectAnthropic(feed: Feed): Promise<Article[]> {
   const html = (await get(feed.url)).replace(/\\"/g, '"');
@@ -130,7 +246,7 @@ async function collectAnthropic(feed: Feed): Promise<Article[]> {
     const url = new URL(path, feed.url).href;
     out.push({ id: createHash('sha1').update(url).digest('hex').slice(0, 10), company: feed.company, title: decode(title).trim(), url, date: new Date(time).toISOString(), excerpt: excerptOf(decode(summary.replace(/\\n/g, ' '))) });
   }
-  return out.slice(0, MAX_PER_COMPANY);
+  return out;
 }
 
 async function collect(feed: Feed): Promise<Article[]> {
@@ -157,14 +273,50 @@ async function collect(feed: Feed): Promise<Article[]> {
     });
   }
   if (dropped) console.log(`drop  ${feed.company.padEnd(16)} ${dropped} non-technical`);
-  return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, MAX_PER_COMPANY);
+  return out;
+}
+
+if (process.argv.includes('--check')) {
+  const draft = (id: string, company: string, url: string, date: string): Article => ({ id, company, title: id, url, date, excerpt: '' });
+  const famous = draft('b', 'Acme', 'https://example.com/famous', '2026-01-01T00:00:00.000Z');
+  const low = draft('c', 'Acme', 'https://example.com/low', '2026-06-01T00:00:00.000Z');
+  const miss = draft('a', 'Acme', 'https://example.com/miss', '2026-03-01T00:00:00.000Z');
+  const points = new Map<string, number>([
+    [urlKey(famous.url), 1275],
+    [urlKey(low.url), 10],
+  ]);
+  const batch = [low, miss, famous];
+  const ranked = rankCatalog(batch, points);
+  if (ranked[0]?.id !== 'b' || ranked[0].hnPoints !== 1275) throw new Error('1275 points leads');
+  if (!ranked.some((a) => a.id === 'a' && a.hnPoints === undefined)) throw new Error('miss stays without hnPoints');
+  const lowAt = ranked.findIndex((a) => a.id === 'c');
+  if (lowAt <= 0 || ranked[lowAt]?.hnPoints !== undefined) throw new Error('10 points stays under the floor');
+
+  const old = draft('old', 'Wide', 'https://wide.example/old', '2020-01-01T00:00:00.000Z');
+  const newer = Array.from({ length: 12 }, (_, i) => {
+    const day = String(i + 1).padStart(2, '0');
+    return draft(`n${day}`, 'Wide', `https://wide.example/n${day}`, `2026-03-${day}T00:00:00.000Z`);
+  });
+  const capped = rankCatalog([old, ...newer], new Map([[urlKey(old.url), 500]]));
+  if (capped.length !== 12 || !capped.some((a) => a.id === 'old')) throw new Error('cap keeps the 500-point post');
+
+  const again = rankCatalog(batch, points);
+  if (ranked.map((a) => a.id).join() !== again.map((a) => a.id).join()) throw new Error('same ids on a second call');
+
+  const sameDay = '2026-04-01T00:00:00.000Z';
+  const tieM = draft('m', 'Tie', 'https://tie.example/m', sameDay);
+  const tieD = draft('d', 'Tie', 'https://tie.example/d', sameDay);
+  const tied = rankCatalog([tieM, tieD], new Map([[urlKey(tieM.url), 40], [urlKey(tieD.url), 40]]));
+  if (tied[0]?.id !== 'd' || tied[1]?.id !== 'm') throw new Error('equal points and dates order by id');
+
+  process.exit(0);
 }
 
 const feeds: Feed[] = JSON.parse(await readFile('feeds.json', 'utf8'));
 const results = await Promise.allSettled(feeds.map(collect));
 
 const seen = new Set<string>();
-const articles: Article[] = [];
+let articles: Article[] = [];
 results.forEach((r, i) => {
   if (r.status === 'rejected') {
     console.warn(`skip  ${feeds[i].company.padEnd(16)} ${r.reason?.message ?? r.reason}`);
@@ -172,12 +324,15 @@ results.forEach((r, i) => {
   }
   console.log(`ok    ${feeds[i].company.padEnd(16)} ${r.value.length} recent`);
   for (const a of r.value) {
-    const key = a.url.replace(/[?#].*$/, '').replace(/\/$/, '');
+    const key = urlKey(a.url);
     if (seen.has(key)) continue;
     seen.add(key);
     articles.push(a);
   }
 });
+
+const points = await fame(articles);
+articles = rankCatalog(articles, points);
 
 const missing = articles.filter((a) => !a.excerpt);
 for (let i = 0; i < missing.length; i += 8) {
@@ -189,7 +344,6 @@ const counts = new Map<string, number>();
 for (const a of articles) counts.set(a.excerpt, (counts.get(a.excerpt) ?? 0) + 1);
 for (const a of articles) if ((counts.get(a.excerpt) ?? 0) > 2) a.excerpt = '';
 
-articles.sort((a, b) => b.date.localeCompare(a.date));
 await mkdir('public', { recursive: true });
 await writeFile('public/articles.json', JSON.stringify(articles));
 console.log(`\nwrote ${articles.length} articles from the last ${WINDOW_DAYS} days to public/articles.json`);

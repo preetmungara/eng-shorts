@@ -6,4 +6,5 @@ export type Article = {
   date: string;
   excerpt: string;
   readMins?: number;
+  hnPoints?: number;
 };
