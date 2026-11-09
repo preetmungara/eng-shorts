@@ -54,6 +54,10 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
+article.card {
+  background: color-mix(in srgb, hsl(var(--hue) 80% 55%) 7%, var(--bg));
+}
+
 .inner {
   width: 100%;
   max-width: 40rem;
@@ -68,10 +72,22 @@ body {
 }
 
 .company {
-  color: var(--accent);
+  color: hsl(var(--hue) 80% 28%);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
+}
+
+@media (prefers-color-scheme: dark) {
+  .company {
+    color: hsl(var(--hue) 80% 74%);
+  }
+}
+
+.hn {
+  color: var(--fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .tag {
@@ -133,7 +149,8 @@ body {
 }
 
 .is-read .title,
-.is-read .excerpt {
+.is-read .excerpt,
+.is-read .hn {
   opacity: 0.55;
 }
 

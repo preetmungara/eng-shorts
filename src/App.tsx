@@ -21,6 +21,20 @@ function loadRead(): Set<string> {
   }
 }
 
+function hueOf(company: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < company.length; i++) h = Math.imul(h ^ company.charCodeAt(i), 16777619);
+  return (h >>> 0) % 360;
+}
+
+function readOn(url: string): string {
+  try {
+    return `Read on ${new URL(url).hostname.replace(/^www\./, '')} →`;
+  } catch {
+    return 'Read the full article →';
+  }
+}
+
 export function App() {
   const [articles, setArticles] = useState<Article[] | null>(null);
   const [error, setError] = useState(false);
@@ -43,33 +57,39 @@ export function App() {
   };
 
   const go = (i: number) => {
+    if (i < 0) return;
+    setLimit((n) => (i + 3 >= n ? n + BATCH : n));
     const cards = feed.current?.children;
-    if (!cards || i < 0 || i >= cards.length) return;
+    if (!cards || i >= cards.length) return;
+    setIndex(i);
     cards[i].scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
   };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const el = feed.current;
+      if (!el || el.clientHeight === 0) return;
+      const current = Math.round(el.scrollTop / el.clientHeight);
       if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'PageDown') {
         e.preventDefault();
-        go(index + 1);
+        go(current + 1);
       } else if (e.key === 'ArrowUp' || e.key === 'k' || e.key === 'PageUp') {
         e.preventDefault();
-        go(index - 1);
+        go(current - 1);
       } else if (e.key === 'Enter' && document.activeElement === document.body) {
-        feed.current?.children[index]?.querySelector('a')?.click();
+        el.children[current]?.querySelector('a')?.click();
       }
     };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
-  }, [index]);
+  }, []);
 
   const onScroll = (e: Event) => {
     const el = e.currentTarget as HTMLElement;
     const i = Math.round(el.scrollTop / el.clientHeight);
     setIndex(i);
-    if (i + 3 >= limit) setLimit(limit + BATCH);
+    setLimit((n) => (i + 3 >= n ? n + BATCH : n));
   };
 
   if (error) return <p class="status">Couldn't load articles. Try refreshing.</p>;
@@ -85,10 +105,11 @@ export function App() {
       </header>
       <main class="feed" ref={feed} onScroll={onScroll}>
         {articles.slice(0, limit).map((a) => (
-          <article class={read.has(a.id) ? 'card is-read' : 'card'} key={a.id}>
+          <article class={read.has(a.id) ? 'card is-read' : 'card'} key={a.id} style={{ '--hue': hueOf(a.company) }}>
             <div class="inner">
               <p class="meta">
                 <span class="company">{a.company}</span>
+                {a.hnPoints !== undefined && <span class="hn">▲ {a.hnPoints.toLocaleString('en-US')} on Hacker News</span>}
                 <span>{ago(a.date)}</span>
                 {a.readMins && <span>{a.readMins} min read</span>}
                 {read.has(a.id) && <span class="tag">read</span>}
@@ -99,7 +120,7 @@ export function App() {
                 </a>
               </h2>
               {a.excerpt && <p class="excerpt">{a.excerpt}</p>}
-              <span class="cta" aria-hidden="true">Read the full article →</span>
+              <span class="cta" aria-hidden="true">{readOn(a.url)}</span>
             </div>
           </article>
         ))}
