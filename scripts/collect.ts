@@ -3,7 +3,6 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import Parser from 'rss-parser';
 import type { Article } from '../src/types';
 
-const WINDOW_DAYS = 60;
 const TIMEOUT_MS = 20_000;
 const EXCERPT_MAX = 280;
 const EXCERPT_MIN = 60;
@@ -14,7 +13,6 @@ type Feed = { company: string; url: string };
 type Item = Parser.Item & { summary?: string; 'content:encoded'?: string; 'content:encodedSnippet'?: string };
 
 const parser = new Parser<{}, Item>();
-const cutoff = Date.now() - WINDOW_DAYS * 86_400_000;
 
 async function get(url: string): Promise<string> {
   const res = await fetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -174,7 +172,7 @@ async function hnHits(site: string, sinceUnix: number): Promise<Map<string, numb
 }
 
 async function fame(articles: Article[]): Promise<Map<string, number>> {
-  const since = Math.floor(cutoff / 1000);
+  const since = Math.floor(Math.min(...articles.map((a) => Date.parse(a.date)), Date.now()) / 1000);
   const settled = await Promise.allSettled(sitesOf(articles).map(async (site) => {
     try {
       return await hnHits(site, since);
@@ -242,7 +240,7 @@ async function collectAnthropic(feed: Feed): Promise<Article[]> {
     const title = after.match(/"title":"((?:[^"\\]|\\.)*)"/)?.[1];
     const summary = after.match(/"summary":"((?:[^"\\]|\\.)*)"/)?.[1] ?? '';
     const time = Date.parse(date ?? '');
-    if (!title || !time || time < cutoff || HARD_BLOCK.test(title)) continue;
+    if (!title || !time || HARD_BLOCK.test(title)) continue;
     const url = new URL(path, feed.url).href;
     out.push({ id: createHash('sha1').update(url).digest('hex').slice(0, 10), company: feed.company, title: decode(title).trim(), url, date: new Date(time).toISOString(), excerpt: excerptOf(decode(summary.replace(/\\n/g, ' '))) });
   }
@@ -256,7 +254,7 @@ async function collect(feed: Feed): Promise<Article[]> {
   let dropped = 0;
   for (const item of parsed.items) {
     const time = Date.parse(item.isoDate ?? item.pubDate ?? '');
-    if (!item.link || !item.title || !time || time < cutoff) continue;
+    if (!item.link || !item.title || !time) continue;
     const raw = item['content:encoded'] ?? item.content ?? '';
     const full = toText(raw);
     const words = full ? full.split(' ').length : 0;
@@ -322,7 +320,7 @@ results.forEach((r, i) => {
     console.warn(`skip  ${feeds[i].company.padEnd(16)} ${r.reason?.message ?? r.reason}`);
     return;
   }
-  console.log(`ok    ${feeds[i].company.padEnd(16)} ${r.value.length} recent`);
+  console.log(`ok    ${feeds[i].company.padEnd(16)} ${r.value.length}`);
   for (const a of r.value) {
     const key = urlKey(a.url);
     if (seen.has(key)) continue;
@@ -346,4 +344,4 @@ for (const a of articles) if ((counts.get(a.excerpt) ?? 0) > 2) a.excerpt = '';
 
 await mkdir('public', { recursive: true });
 await writeFile('public/articles.json', JSON.stringify(articles));
-console.log(`\nwrote ${articles.length} articles from the last ${WINDOW_DAYS} days to public/articles.json`);
+console.log(`\nwrote ${articles.length} articles to public/articles.json`);
