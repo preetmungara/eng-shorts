@@ -1,10 +1,37 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { OPEN, learn, parseTaste, rankFeed, signalOf, type Ranked } from './rank';
 import type { Article } from './types';
 
 const READ_KEY = 'read-ids';
+const TASTE_KEY = 'taste';
 const BATCH = 10;
 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const settled = new Map<string, number>();
+
+function dayKey(now: number): string {
+  const d = new Date(now);
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const date = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${date}`;
+}
+
+function newId(): string {
+  const bytes = new Uint8Array(4);
+  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+let taste = parseTaste(localStorage.getItem(TASTE_KEY), Date.now(), newId);
+
+function credit(a: Article, signal: number) {
+  const prev = settled.get(a.id);
+  if (prev !== undefined && signal <= prev) return;
+  settled.set(a.id, signal);
+  taste = learn(taste, a, signal - (prev ?? 0), Date.now());
+  try { localStorage.setItem(TASTE_KEY, JSON.stringify(taste)); } catch {}
+}
 
 function ago(iso: string): string {
   const days = Math.round((Date.parse(iso) - Date.now()) / 86_400_000);
@@ -36,24 +63,49 @@ function readOn(url: string): string {
 }
 
 export function App() {
-  const [articles, setArticles] = useState<Article[] | null>(null);
+  const [cards, setCards] = useState<Ranked[] | null>(null);
   const [error, setError] = useState(false);
   const [read, setRead] = useState(loadRead);
   const [index, setIndex] = useState(0);
   const [limit, setLimit] = useState(BATCH);
   const feed = useRef<HTMLElement>(null);
+  const shown = useRef({ i: 0, ms: 0, since: performance.now() });
 
   useEffect(() => {
     fetch('articles.json')
       .then((r) => r.json())
-      .then(setArticles)
+      .then((list: Article[]) => {
+        setCards(rankFeed(list, taste, loadRead(), Date.now(), dayKey(Date.now())));
+        shown.current.since = performance.now();
+      })
       .catch(() => setError(true));
   }, []);
 
-  const markRead = (id: string) => {
-    const next = new Set(read).add(id);
+  useEffect(() => {
+    const s = shown.current;
+    if (index === s.i) return;
+    const ms = s.ms + (Number.isNaN(s.since) ? 0 : performance.now() - s.since);
+    const a = cards?.[s.i]?.article;
+    const signal = signalOf(ms, index > s.i);
+    if (a && signal !== null) credit(a, signal);
+    shown.current = { i: index, ms: 0, since: document.hidden ? NaN : performance.now() };
+  }, [index]);
+
+  useEffect(() => {
+    const onVis = () => {
+      const s = shown.current;
+      if (document.hidden && !Number.isNaN(s.since)) { s.ms += performance.now() - s.since; s.since = NaN; }
+      else if (!document.hidden) s.since = performance.now();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
+  const markRead = (a: Article) => {
+    const next = new Set(read).add(a.id);
     setRead(next);
     localStorage.setItem(READ_KEY, JSON.stringify([...next]));
+    credit(a, OPEN);
   };
 
   const go = (i: number) => {
@@ -93,18 +145,18 @@ export function App() {
   };
 
   if (error) return <p class="status">Couldn't load articles. Try refreshing.</p>;
-  if (!articles) return <p class="status">Loading…</p>;
+  if (!cards) return <p class="status">Loading…</p>;
 
   return (
     <>
       <header class="bar">
         <span class="brand">eng shorts</span>
         <span class="count" aria-live="polite">
-          {Math.min(index + 1, articles.length)} / {articles.length}
+          {Math.min(index + 1, cards.length)} / {cards.length}
         </span>
       </header>
       <main class="feed" ref={feed} onScroll={onScroll}>
-        {articles.slice(0, limit).map((a) => (
+        {cards.slice(0, limit).map(({ article: a, why }) => (
           <article class={read.has(a.id) ? 'card is-read' : 'card'} key={a.id} style={{ '--hue': hueOf(a.company) }}>
             <div class="inner">
               <p class="meta">
@@ -113,9 +165,10 @@ export function App() {
                 <span>{ago(a.date)}</span>
                 {a.readMins && <span>{a.readMins} min read</span>}
                 {read.has(a.id) && <span class="tag">read</span>}
+                {why && <span class="tag">{why}</span>}
               </p>
               <h2 class="title">
-                <a href={a.url} target="_blank" rel="noopener" onClick={() => markRead(a.id)}>
+                <a href={a.url} target="_blank" rel="noopener" onClick={() => markRead(a)}>
                   {a.title}
                 </a>
               </h2>
@@ -124,11 +177,11 @@ export function App() {
             </div>
           </article>
         ))}
-        {limit >= articles.length && <section class="card end">
+        {limit >= cards.length && <section class="card end">
           <div class="inner">
             <h2 class="title">You're caught up.</h2>
             <p class="excerpt">
-              That's every post from the last 60 days. You opened {articles.filter((a) => read.has(a.id)).length}. Go finish one of them instead of
+              That's every post from the last 60 days. You opened {cards.filter((c) => read.has(c.article.id)).length}. Go finish one of them instead of
               scrolling more.
             </p>
             <button class="cta" onClick={() => go(0)}>
