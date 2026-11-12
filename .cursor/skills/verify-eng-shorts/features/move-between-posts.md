@@ -21,13 +21,13 @@ Preconditions:
 - Doctor passed and `check-start` still shows `1 / N`.
 - The catalog has at least two articles, so a second card exists inside the first batch of ten.
 
-- **Next, arrow.** Press Down. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser press --key ArrowDown`. The printed count is `2 / N` and the printed title is the second title in `/articles.json`.
+- **Next, arrow.** Press Down. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser press --key ArrowDown`. The printed count is `2 / N` and the printed title is a different title from `/articles.json` than the one on the first card.
 - **Previous, arrow.** Press Up. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser press --key ArrowUp`. The count returns to `1 / N` and the title is the first article again.
 - **Next, j.** Press `j`. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser press --key j`. The count is `2 / N`.
 - **Previous, k.** Press `k`. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser press --key k`. The count is `1 / N`.
 - **Stay at the top.** Press Up on the first card. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser press --key ArrowUp`. The count stays `1 / N`.
 - **Page keys.** From the first card, run `node .cursor/skills/verify-eng-shorts/harness.mjs browser press --key PageDown` and expect `2 / N`, then `node .cursor/skills/verify-eng-shorts/harness.mjs browser press --key PageUp` and expect `1 / N`.
-- **Proof.** After a forward move, run `node .cursor/skills/verify-eng-shorts/harness.mjs browser snapshot --path .cursor/skills/verify-eng-shorts/artifacts/move/second.txt` and `node .cursor/skills/verify-eng-shorts/harness.mjs browser screenshot --path .cursor/skills/verify-eng-shorts/artifacts/move/second.png`. The count line is `2 / N` and the title is the second article.
+- **Proof.** After a forward move, run `node .cursor/skills/verify-eng-shorts/harness.mjs browser snapshot --path .cursor/skills/verify-eng-shorts/artifacts/move/second.txt` and `node .cursor/skills/verify-eng-shorts/harness.mjs browser screenshot --path .cursor/skills/verify-eng-shorts/artifacts/move/second.png`. The count line is `2 / N` and the title is a title from `/articles.json` other than the first card's.
 
 ## Gotchas
 

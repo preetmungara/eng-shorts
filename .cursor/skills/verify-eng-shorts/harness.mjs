@@ -382,9 +382,11 @@ async function serve() {
     const problems = [];
     if (state.brand !== 'eng shorts') problems.push(`brand is ${JSON.stringify(state.brand)}`);
     if (state.count !== expectedCount) problems.push(`count is ${JSON.stringify(state.count)}, want ${expectedCount}`);
-    if (state.title !== served[0].title) problems.push(`first title is ${JSON.stringify(state.title)}, want ${JSON.stringify(served[0].title)}`);
-    if (state.company !== served[0].company) problems.push(`first company is ${JSON.stringify(state.company)}, want ${JSON.stringify(served[0].company)}`);
     if (state.status) problems.push(`status is ${JSON.stringify(state.status)}`);
+    // The reader personalizes its order, so the open card is checked against the catalog by title, not by position.
+    const servedCard = served.find((a) => a.title === state.title);
+    if (!servedCard) problems.push(`open title is ${JSON.stringify(state.title)}, which is not in articles.json`);
+    else if (servedCard.company !== state.company) problems.push(`open company is ${JSON.stringify(state.company)}, want ${JSON.stringify(servedCard.company)}`);
     if (problems.length) throw new Error(problems.join('; '));
     return { brand: state.brand, count: state.count, title: state.title, company: state.company, articles: served.length };
   }
