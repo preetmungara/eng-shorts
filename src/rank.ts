@@ -160,6 +160,8 @@ function whyOf(s: Scored, w: Record<string, number>): string | null {
 }
 
 function diversify(scored: Scored[], t: Taste): Ranked[] {
+  // ponytail: one linear scan per slot, so O(n^2) over the catalog. Fine at a few hundred posts;
+  // index by company and topic if the feed ever reaches thousands.
   const byTotal = [...scored].sort(by('total'));
   const byBase = [...scored].sort(by('base'));
   const warm = Object.values(t.w).some((v) => v > 0);

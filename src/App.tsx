@@ -181,7 +181,7 @@ export function App() {
           <div class="inner">
             <h2 class="title">You're caught up.</h2>
             <p class="excerpt">
-              That's every post from the last 60 days. You opened {cards.filter((c) => read.has(c.article.id)).length}. Go finish one of them instead of
+              That's every post in the catalog. You opened {cards.filter((c) => read.has(c.article.id)).length}. Go finish one of them instead of
               scrolling more.
             </p>
             <button class="cta" onClick={() => go(0)}>
