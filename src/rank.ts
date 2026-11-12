@@ -177,7 +177,7 @@ function diversify(scored: Scored[], t: Taste): Ranked[] {
       const open = (s: Scored) => !used.has(s.a.id) && fits(s, placed);
       pick = byBase.find((s) => open(s) && unexplored(s) && !usedExplorePrimary.has(s.topics[0]))
         ?? byBase.find((s) => open(s) && unexplored(s))
-        ?? byBase.find((s) => open(s) && s.topics.every((topic) => (t.w['t:' + topic] ?? 0) < UNEXPLORED));
+        ?? byBase.find((s) => open(s) && s.topics.length > 0 && s.topics.every((topic) => (t.w['t:' + topic] ?? 0) < UNEXPLORED));
       fromExplore = pick !== undefined;
     }
     if (!pick) pick = byTotal.find((s) => !used.has(s.a.id) && fits(s, placed));

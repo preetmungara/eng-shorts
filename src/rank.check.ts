@@ -158,6 +158,12 @@ if (grafted[9]?.why !== 'new to you' || topicsOf(grafted[9].article)[0] === 'dat
 }
 if (topicsOf(grafted[4].article)[0] === topicsOf(grafted[9].article)[0]) throw new Error('explore primary repeated');
 
+const untagged = Array.from({ length: 8 }, (_, i) => art(`u${i}`, `U${i}`, iso(NOW), []));
+const untaggedExplore = rankFeed([...Array.from({ length: 6 }, (_, i) => art(`fA${i}`, `FA${i}`, iso(NOW), ['ai'], 1000)), ...untagged], taste('warm', { 't:ai': 3 }), new Set(), NOW, DAY);
+for (const card of untaggedExplore.filter((c) => c.why === 'new to you')) {
+  if (topicsOf(card.article).length === 0) throw new Error('untagged card labelled new to you');
+}
+
 const coldCards = rankFeed(fresh, taste('cold'), new Set(), NOW, DAY);
 if (coldCards.some((c) => c.why !== null)) throw new Error('cold start is labelled');
 const labelled = rankFeed([art('loved', 'Other', iso(NOW), ['ai'])], (() => {
