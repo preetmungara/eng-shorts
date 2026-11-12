@@ -9,7 +9,8 @@
     "collect": "tsx scripts/collect.ts",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check": "tsx scripts/collect.ts --check && tsx src/rank.check.ts"
   },
   "dependencies": {
     "preact": "^10.24.0"
