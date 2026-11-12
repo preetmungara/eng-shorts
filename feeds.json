@@ -68,5 +68,6 @@
   { "company": "Zendesk", "url": "https://zendesk.engineering/feed" },
   { "company": "Zoom", "url": "https://developers.zoom.us/blog/rss.xml" },
   { "company": "eBay", "url": "https://innovation.ebayinc.com/stories/rss/" },
-  { "company": "The Daily Diff", "url": "https://tdd.cat/rss.xml" }
+  { "company": "The Daily Diff", "url": "https://tdd.cat/rss.xml" },
+  { "company": "Gojek", "url": "https://medium.com/feed/gojekengineering" }
 ]
