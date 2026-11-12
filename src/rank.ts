@@ -29,14 +29,14 @@ const TOPICS: [string, RegExp][] = [
   ['performance', /\b(performance|latency|throughput|faster|speed\w*|optimi[sz]\w*|benchmark\w*|p99|memory use|efficien\w*|cost savings)\b/i],
   ['search', /\b(search|index\w*|ranking|recommend\w*|retrieval|vector)\b/i],
   ['dataeng', /\b(pipelines?|etl|spark|kafka|streaming|data (?:platform|engineering|lake|warehouse)|lakehouse|batch|flink|iceberg|knowledge graph)\b/i],
-  ['security', /\b(security|secur\w+|vulnerab\w*|threat\w*|encrypt\w*|post-quantum|cryptograph\w*|auth\w*|privacy|exploit\w*|supply chain)\b/i],
+  ['security', /\b(security|secur\w+|vulnerab\w*|threat\w*|encrypt\w*|post-quantum|cryptograph\w*|\bauth0\b|\bauthenticat\w*|\bauthoriz\w*|\boauth\b|privacy|exploit\w*|supply chain)\b/i],
   ['databases', /\b(databases?|postgres\w*|mysql|sqlite|sql|redis|dynamodb|time-series|schema|replication|sharding|query|queries)\b/i],
   ['reliability', /\b(reliab\w*|outages?|incidents?|postmortem|post-mortem|failover|resilien\w*|downtime|on-?call|sre)\b/i],
   ['distributed', /\b(distributed|consensus|raft|paxos|message bus|queues?|multi-region|replicat\w*|eventual\w*)\b/i],
   ['observability', /\b(observability|tracing|traces|logs?|logging|metrics|monitoring|telemetry|opentelemetry|profil\w*)\b/i],
   ['mobile', /\b(mobile|ios|android|react native|swift|kotlin)\b/i],
   ['devprod', /\b(developer (?:experience|productivity)|ci|build systems?|monorepo|code review|git|tooling|dev ?tools?)\b/i],
-  ['languages', /\b(rust|golang|go|python|java|typescript|javascript|compilers?|ocaml|c\+\+|wasm|webassembly)\b/i],
+  ['languages', /\b(rust|golang|python|java|typescript|javascript|compilers?|ocaml|c\+\+|wasm|webassembly)\b/i],
   ['networking', /\b(network\w*|dns|tcp|quic|http\/?[23]?|tls|cdn|bgp|load balanc\w*)\b/i],
   ['frontend', /\b(frontend|front-end|css|browsers?|react|ui|web performance|rendering)\b/i],
 ];
@@ -148,7 +148,7 @@ function fits(c: Scored, out: Scored[]): boolean {
 function whyOf(s: Scored, w: Record<string, number>): string | null {
   if (s.taste <= WHY_MIN) return null;
   let name = s.a.company;
-  let best = w['c:' + s.a.company] ?? 0;
+  let best = 0;
   for (const topic of s.topics) {
     const v = w['t:' + topic] ?? 0;
     if (v > best) {
@@ -174,7 +174,10 @@ function diversify(scored: Scored[], t: Taste): Ranked[] {
     let pick: Scored | undefined;
     let fromExplore = false;
     if (explore) {
-      pick = byBase.find((s) => !used.has(s.a.id) && unexplored(s) && !usedExplorePrimary.has(s.topics[0]) && fits(s, placed));
+      const open = (s: Scored) => !used.has(s.a.id) && fits(s, placed);
+      pick = byBase.find((s) => open(s) && unexplored(s) && !usedExplorePrimary.has(s.topics[0]))
+        ?? byBase.find((s) => open(s) && unexplored(s))
+        ?? byBase.find((s) => open(s) && s.topics.every((topic) => (t.w['t:' + topic] ?? 0) < UNEXPLORED));
       fromExplore = pick !== undefined;
     }
     if (!pick) pick = byTotal.find((s) => !used.has(s.a.id) && fits(s, placed));

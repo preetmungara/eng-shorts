@@ -19,7 +19,13 @@ const failedPath = path.join(home, 'failed');
 
 const STATE_EXPR = String.raw`(() => {
   const trim = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  const card = document.querySelector('article.card:not(.end)');
+  const feed = document.querySelector('.feed');
+  const cards = feed ? [...feed.children].filter((el) => el.classList.contains('card')) : [];
+  let card = document.querySelector('article.card:not(.end)');
+  if (feed && cards.length) {
+    const raw = feed.clientHeight ? Math.round(feed.scrollTop / feed.clientHeight) : 0;
+    card = cards[Math.min(cards.length - 1, Math.max(0, raw))];
+  }
   return {
     brand: trim(document.querySelector('.brand')?.textContent),
     count: trim(document.querySelector('.count')?.textContent),
