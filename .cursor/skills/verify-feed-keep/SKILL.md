@@ -14,10 +14,10 @@ A post that should have been dropped shows up in the reader. A marketing or bloc
 - File: `scripts/collect.ts`
 - Function: `keep`
 - Constants the check loads with it: `MIXED`, `HARD_BLOCK`, `MARKETING`, `TECH`, `GENERIC`
-- Last confirmed the check describes that code: commit `25a80eb699317114041e64108483fcf7c7495819`, extracted-source hash `f227c9c361746b7a`
+- Last confirmed the check describes that code: commit `2004e2b02d05f9f3378ef75b00258cc3b6b06735`, extracted-source hash `7a46cbfcc6434ee1`
 - Representatives locked by the check: Stripe is mixed, Netflix is trusted
 
-Move the sync commit and the hash forward only after you re-read `keep()` at the new commit and the check still describes it. A pass on a stale reading is not a pass on the new code.
+Move the sync commit and the hash forward (`SYNC` and `SOURCE` in `check.mjs`, and the line above) only after you re-read `keep()` at the new commit and the check still describes it. A pass on a stale reading is not a pass on the new code.
 
 ## Run
 
@@ -35,7 +35,7 @@ Exit 1 is a finding. Each `FAIL` block names the company, title, categories, lin
 
 Exit 2 means this skill no longer describes the file: the `MIXED` / `keep()` slice moved, the function failed to load, or a constructed title no longer matches the shape name in `check.mjs`. That is a verifier bug. Fix the verifier, or stop and say the check is stale. Do not call it a feed finding.
 
-The check also warns on stderr when `HEAD` is not the sync commit, or when `scripts/collect.ts` differs from `HEAD`. It still checks the working tree. Re-read `keep()` before trusting that pass, then move the sync commit only if the check still describes the code.
+The check also warns on stderr when the extracted `MIXED` / `keep()` source no longer hashes to the confirmed hash, or when `scripts/collect.ts` differs from `HEAD`. Commits that leave that slice alone do not warn. It still checks the working tree. Re-read `keep()` before trusting that pass, then move the sync commit only if the check still describes the code.
 
 ## Bounds
 

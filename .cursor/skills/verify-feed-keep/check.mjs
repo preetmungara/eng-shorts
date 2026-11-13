@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SYNC = '25a80eb699317114041e64108483fcf7c7495819';
+const SYNC = '2004e2b02d05f9f3378ef75b00258cc3b6b06735';
+const SOURCE = '7a46cbfcc6434ee1';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const collectPath = path.join(repo, 'scripts', 'collect.ts');
 
@@ -27,15 +28,11 @@ try {
 }
 const { keep, MIXED, HARD_BLOCK, MARKETING, TECH, GENERIC } = loaded;
 
-let head = '';
 let dirty = false;
 try {
-  head = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim();
   dirty = execSync('git diff HEAD -- scripts/collect.ts', { cwd: repo, encoding: 'utf8' }).trim().length > 0;
-} catch {
-  head = '';
-}
-if (head && head !== SYNC) console.error(`sync commit ${SYNC} is not HEAD (${head}). Re-read keep() before treating a pass as current.`);
+} catch {}
+if (sourceHash !== SOURCE) console.error(`keep() source ${sourceHash} is not the source ${SOURCE} confirmed at ${SYNC}. Re-read keep() before treating a pass as current.`);
 if (dirty) console.error('scripts/collect.ts differs from HEAD. The check runs against the working tree.');
 
 const findings = [];
