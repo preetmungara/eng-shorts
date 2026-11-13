@@ -6,7 +6,7 @@ import type { Article } from '../src/types';
 const TIMEOUT_MS = 20_000;
 const EXCERPT_MAX = 280;
 const EXCERPT_MIN = 60;
-const MAX_PER_COMPANY = 12;
+const MIN_TIME = Date.parse('2005-01-01');
 const UA = 'Mozilla/5.0 (compatible; EngShortsBot/1.0; +https://github.com/)';
 
 type Feed = { company: string; url: string };
@@ -72,11 +72,22 @@ async function metaDescription(url: string): Promise<string> {
   }
 }
 
+// Some feeds (Google Developers) ship items without dates; the post page usually has one.
+async function pageDate(url: string): Promise<number> {
+  try {
+    const html = await get(url);
+    const m = html.match(/"datePublished"\s*:\s*"([^"]+)"/) ?? html.match(/<meta[^>]+property=["']article:published_time["'][^>]*content=["']([^"']+)["']/i);
+    return m ? Date.parse(m[1]) : NaN;
+  } catch {
+    return NaN;
+  }
+}
+
 // Layer 1: tier the sources. Dedicated engineering feeds are trusted; general company
 // blogs (product launches, marketing, company news in the same feed) are mixed and must
 // earn their way in via the scorer below. Precision over recall: a dropped good post
 // costs nothing, a leaked marketing post costs trust.
-const MIXED = new Set(['OpenAI', 'Stripe', 'Cloudflare', 'Discord', 'Figma', 'Google', 'Hugging Face', 'Nvidia', 'Twilio', 'Docker', 'HashiCorp', 'Tailscale', 'PlanetScale', 'Supabase', 'Sentry', 'Duolingo', 'AWS News', 'Auth0', 'Cloudera', 'Confluent', 'Databricks', 'Elastic', 'Grafana Labs', 'Heroku', 'HubSpot', 'Okta', 'Postman', 'Red Hat', 'Salesforce', 'Stack Overflow', 'Timescale', 'Zapier', 'Zoom', 'eBay']);
+const MIXED = new Set(['OpenAI', 'Stripe', 'Cloudflare', 'Discord', 'Figma', 'Hugging Face', 'Nvidia', 'Twilio', 'Docker', 'HashiCorp', 'PlanetScale', 'Supabase', 'Sentry', 'Duolingo', 'AWS News', 'Auth0', 'Cloudera', 'Confluent', 'Databricks', 'Elastic', 'Grafana Labs', 'Heroku', 'HubSpot', 'Okta', 'Postman', 'Red Hat', 'Salesforce', 'Stack Overflow', 'Timescale', 'Zoom', 'eBay']);
 
 // Layer 2: deterministic scorer. Hard-block obvious non-posts for every feed, then score
 // title/categories/url/code/depth. Mixed feeds need a clear technical score; trusted
@@ -117,7 +128,7 @@ const HN_SEARCH = 'https://hn.algolia.com/api/v1/search';
 function urlKey(url: string): string {
   try {
     const u = new URL(url);
-    return (u.hostname.replace(/^www\./, '') + u.pathname.replace(/\/+$/, '')).toLowerCase();
+    return (u.hostname.replace(/^(?:www|old)\./, '') + u.pathname.replace(/\/+$/, '')).toLowerCase();
   } catch {
     return url.toLowerCase();
   }
@@ -125,6 +136,7 @@ function urlKey(url: string): string {
 
 function sitesOf(articles: Article[]): string[] {
   const companiesByHost = new Map<string, Set<string>>();
+  const segmentsByHost = new Map<string, Set<string>>();
   const rows: { host: string; segment: string }[] = [];
   for (const a of articles) {
     let host = '';
@@ -132,19 +144,25 @@ function sitesOf(articles: Article[]): string[] {
     try {
       const u = new URL(a.url);
       host = u.hostname.replace(/^www\./, '');
-      segment = (u.pathname.split('/').filter(Boolean)[0] ?? '').toLowerCase();
+      const parts = u.pathname.split('/').filter(Boolean);
+      // Reddit paths are /r/<subreddit>/…; the subreddit is what names the blog.
+      segment = ((parts[0] === 'r' ? parts[1] : parts[0]) ?? '').toLowerCase();
     } catch {
       continue;
     }
     const companies = companiesByHost.get(host) ?? new Set<string>();
     companies.add(a.company);
     companiesByHost.set(host, companies);
+    const segments = segmentsByHost.get(host) ?? new Set<string>();
+    segments.add(segment);
+    segmentsByHost.set(host, segments);
     rows.push({ host, segment });
   }
   const sites = new Set<string>();
   for (const { host, segment } of rows) {
     const shared = (companiesByHost.get(host)?.size ?? 0) > 1;
-    sites.add(shared && segment ? `${host} ${segment}` : host);
+    const uniform = segmentsByHost.get(host)?.size === 1;
+    sites.add((shared || uniform) && segment ? `${host} ${segment}` : host);
   }
   return [...sites].sort();
 }
@@ -154,7 +172,7 @@ async function hnHits(site: string, sinceUnix: number): Promise<Map<string, numb
     tags: 'story',
     restrictSearchableAttributes: 'url',
     query: site,
-    numericFilters: `created_at_i>${sinceUnix}`,
+    numericFilters: `created_at_i>${sinceUnix},points>=${FAME_MIN}`,
     hitsPerPage: '1000',
   });
   const body = JSON.parse(await get(`${HN_SEARCH}?${q}`)) as { nbHits?: number; hits?: { url?: string; points?: number }[] };
@@ -194,9 +212,32 @@ async function fame(articles: Article[]): Promise<Map<string, number>> {
   return points;
 }
 
+// Feeds only carry their latest items, so the catalog keeps every post it has ever seen.
+// ponytail: grows without bound (~2k posts a year); prune by age if articles.json or rank.ts diversify gets slow.
+function merge(prev: Article[], fresh: Article[], now: number): Article[] {
+  const byKey = new Map(prev.map((a) => [urlKey(a.url), a]));
+  for (const a of fresh) {
+    const old = byKey.get(urlKey(a.url));
+    byKey.set(urlKey(a.url), { ...old, ...a, excerpt: a.excerpt || old?.excerpt || '' });
+  }
+  return [...byKey.values()].filter((a) => {
+    const t = Date.parse(a.date);
+    return t >= MIN_TIME && t <= now + 86_400_000;
+  });
+}
+
+async function previous(): Promise<Article[]> {
+  try {
+    const list = JSON.parse(await readFile('public/articles.json', 'utf8'));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
 function rankCatalog(articles: Article[], points: Map<string, number>): Article[] {
   const ranked = articles.map((a) => {
-    const n = points.get(urlKey(a.url));
+    const n = Math.max(points.get(urlKey(a.url)) ?? 0, a.hnPoints ?? 0) || undefined;
     return {
       id: a.id,
       company: a.company,
@@ -216,15 +257,7 @@ function rankCatalog(articles: Article[], points: Map<string, number>): Article[
     if (a.id !== b.id) return a.id < b.id ? -1 : 1;
     return 0;
   });
-  const kept: Article[] = [];
-  const perCompany = new Map<string, number>();
-  for (const a of ranked) {
-    const n = perCompany.get(a.company) ?? 0;
-    if (n >= MAX_PER_COMPANY) continue;
-    perCompany.set(a.company, n + 1);
-    kept.push(a);
-  }
-  return kept;
+  return ranked;
 }
 
 // Anthropic's engineering page has no feed; post titles and dates are embedded as JSON in the Next.js payload.
@@ -253,12 +286,13 @@ async function collect(feed: Feed): Promise<Article[]> {
   const out: Article[] = [];
   let dropped = 0;
   for (const item of parsed.items) {
-    const time = Date.parse(item.isoDate ?? item.pubDate ?? '');
-    if (!item.link || !item.title || !time) continue;
+    if (!item.link || !item.title) continue;
     const raw = item['content:encoded'] ?? item.content ?? '';
     const full = toText(raw);
     const words = full ? full.split(' ').length : 0;
     if (!keep(feed, item, raw, words)) { dropped++; continue; }
+    const time = Date.parse(item.isoDate ?? item.pubDate ?? '') || await pageDate(item.link);
+    if (!time) continue;
     const summary = proseFrom(item.content ?? item.summary ?? item['content:encoded'] ?? '') || toText(item.contentSnippet ?? '') || full;
     out.push({
       id: createHash('sha1').update(item.link).digest('hex').slice(0, 10),
@@ -290,13 +324,27 @@ if (process.argv.includes('--check')) {
   const lowAt = ranked.findIndex((a) => a.id === 'c');
   if (lowAt <= 0 || ranked[lowAt]?.hnPoints !== undefined) throw new Error('10 points stays under the floor');
 
-  const old = draft('old', 'Wide', 'https://wide.example/old', '2020-01-01T00:00:00.000Z');
-  const newer = Array.from({ length: 12 }, (_, i) => {
-    const day = String(i + 1).padStart(2, '0');
-    return draft(`n${day}`, 'Wide', `https://wide.example/n${day}`, `2026-03-${day}T00:00:00.000Z`);
-  });
-  const capped = rankCatalog([old, ...newer], new Map([[urlKey(old.url), 500]]));
-  if (capped.length !== 12 || !capped.some((a) => a.id === 'old')) throw new Error('cap keeps the 500-point post');
+  const sites = sitesOf([
+    draft('r1', 'Reddit', 'https://www.reddit.com/r/RedditEng/comments/1/a/', '2026-01-01T00:00:00.000Z'),
+    draft('r2', 'Reddit', 'https://www.reddit.com/r/RedditEng/comments/2/b/', '2026-01-01T00:00:00.000Z'),
+    draft('c1', 'Wide', 'https://wide.example/one', '2026-01-01T00:00:00.000Z'),
+    draft('c2', 'Wide', 'https://wide.example/two', '2026-01-01T00:00:00.000Z'),
+  ]);
+  if (sites.join() !== 'reddit.com redditeng,wide.example') throw new Error('sites ' + sites.join());
+  if (urlKey('https://old.reddit.com/r/RedditEng/comments/1/a/') !== urlKey('https://www.reddit.com/r/RedditEng/comments/1/a')) throw new Error('old.reddit matches www.reddit');
+
+  const now = Date.parse('2026-07-01T00:00:00.000Z');
+  const gone = { ...draft('gone', 'Wide', 'https://wide.example/gone', '2026-01-01T00:00:00.000Z'), excerpt: 'kept', hnPoints: 300 };
+  const placeholder = draft('ph', 'Wide', 'https://wide.example/ph', '2001-01-01T00:00:00.000Z');
+  const future = draft('fut', 'Wide', 'https://wide.example/fut', '2027-01-01T00:00:00.000Z');
+  const updated = { ...draft('gone', 'Wide', 'https://www.wide.example/gone/', '2026-01-01T00:00:00.000Z'), title: 'new title' };
+  const many = Array.from({ length: 20 }, (_, i) => draft(`w${i}`, 'Wide', `https://wide.example/w${i}`, '2026-03-01T00:00:00.000Z'));
+  const merged = rankCatalog(merge([gone, placeholder], [future, ...many], now), new Map());
+  if (!merged.some((a) => a.id === 'gone' && a.hnPoints === 300)) throw new Error('a post that left the feed stays with its points');
+  if (merged.some((a) => a.id === 'ph' || a.id === 'fut')) throw new Error('placeholder and future dates drop');
+  if (merged.length !== 21) throw new Error('no per-company cap');
+  const refreshed = merge([gone], [updated], now);
+  if (refreshed.length !== 1 || refreshed[0].title !== 'new title' || refreshed[0].excerpt !== 'kept') throw new Error('fresh fields win, old excerpt fills a blank');
 
   const again = rankCatalog(batch, points);
   if (ranked.map((a) => a.id).join() !== again.map((a) => a.id).join()) throw new Error('same ids on a second call');
@@ -314,25 +362,27 @@ const feeds: Feed[] = JSON.parse(await readFile('feeds.json', 'utf8'));
 const results = await Promise.allSettled(feeds.map(collect));
 
 const seen = new Set<string>();
-let articles: Article[] = [];
+const fresh: Article[] = [];
 results.forEach((r, i) => {
   if (r.status === 'rejected') {
-    console.warn(`skip  ${feeds[i].company.padEnd(16)} ${r.reason?.message ?? r.reason}`);
+    console.log(`::warning::skip  ${feeds[i].company} ${r.reason?.message ?? r.reason}`);
     return;
   }
-  console.log(`ok    ${feeds[i].company.padEnd(16)} ${r.value.length}`);
+  if (r.value.length === 0) console.log(`::warning::empty ${feeds[i].company} kept 0 posts`);
+  else console.log(`ok    ${feeds[i].company.padEnd(16)} ${r.value.length}`);
   for (const a of r.value) {
     const key = urlKey(a.url);
     if (seen.has(key)) continue;
     seen.add(key);
-    articles.push(a);
+    fresh.push(a);
   }
 });
 
-const points = await fame(articles);
-articles = rankCatalog(articles, points);
+const prev = await previous();
+const points = await fame(fresh);
+const articles = rankCatalog(merge(prev, fresh, Date.now()), points);
 
-const missing = articles.filter((a) => !a.excerpt);
+const missing = articles.filter((a) => !a.excerpt && seen.has(urlKey(a.url)));
 for (let i = 0; i < missing.length; i += 8) {
   await Promise.all(missing.slice(i, i + 8).map(async (a) => (a.excerpt = excerptOf(await metaDescription(a.url)))));
 }
@@ -344,4 +394,4 @@ for (const a of articles) if ((counts.get(a.excerpt) ?? 0) > 2) a.excerpt = '';
 
 await mkdir('public', { recursive: true });
 await writeFile('public/articles.json', JSON.stringify(articles));
-console.log(`\nwrote ${articles.length} articles to public/articles.json`);
+console.log(`\nwrote ${articles.length} articles to public/articles.json (${prev.length} before, ${fresh.length} from feeds)`);

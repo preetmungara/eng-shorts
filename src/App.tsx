@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { OPEN, learn, parseTaste, rankFeed, signalOf, type Ranked } from './rank';
+import { LESS, OPEN, learn, parseTaste, rankFeed, signalOf, type Ranked } from './rank';
 import type { Article } from './types';
 
 const READ_KEY = 'read-ids';
+const SAVED_KEY = 'saved-ids';
 const TASTE_KEY = 'taste';
 const BATCH = 10;
 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
@@ -27,7 +28,7 @@ let taste = parseTaste(localStorage.getItem(TASTE_KEY), Date.now(), newId);
 
 function credit(a: Article, signal: number) {
   const prev = settled.get(a.id);
-  if (prev !== undefined && signal <= prev) return;
+  if (prev === LESS || (prev !== undefined && signal !== LESS && signal <= prev)) return;
   settled.set(a.id, signal);
   taste = learn(taste, a, signal - (prev ?? 0), Date.now());
   try { localStorage.setItem(TASTE_KEY, JSON.stringify(taste)); } catch {}
@@ -40,9 +41,9 @@ function ago(iso: string): string {
   return rtf.format(Math.round(days / 7), 'week');
 }
 
-function loadRead(): Set<string> {
+function loadIds(key: string): Set<string> {
   try {
-    return new Set(JSON.parse(localStorage.getItem(READ_KEY) ?? '[]'));
+    return new Set(JSON.parse(localStorage.getItem(key) ?? '[]'));
   } catch {
     return new Set();
   }
@@ -65,17 +66,19 @@ function readOn(url: string): string {
 export function App() {
   const [cards, setCards] = useState<Ranked[] | null>(null);
   const [error, setError] = useState(false);
-  const [read, setRead] = useState(loadRead);
+  const [read, setRead] = useState(() => loadIds(READ_KEY));
+  const [saved, setSaved] = useState(() => loadIds(SAVED_KEY));
   const [index, setIndex] = useState(0);
   const [limit, setLimit] = useState(BATCH);
   const feed = useRef<HTMLElement>(null);
+  const savedDialog = useRef<HTMLDialogElement>(null);
   const shown = useRef({ i: 0, ms: 0, since: performance.now() });
 
   useEffect(() => {
     fetch('articles.json')
       .then((r) => r.json())
       .then((list: Article[]) => {
-        setCards(rankFeed(list, taste, loadRead(), Date.now(), dayKey(Date.now())));
+        setCards(rankFeed(list, taste, loadIds(READ_KEY), Date.now(), dayKey(Date.now())));
         shown.current.since = performance.now();
       })
       .catch(() => setError(true));
@@ -86,7 +89,7 @@ export function App() {
     if (index === s.i) return;
     const ms = s.ms + (Number.isNaN(s.since) ? 0 : performance.now() - s.since);
     const a = cards?.[s.i]?.article;
-    const signal = signalOf(ms, index > s.i);
+    const signal = signalOf(ms);
     if (a && signal !== null) credit(a, signal);
     shown.current = { i: index, ms: 0, since: document.hidden ? NaN : performance.now() };
   }, [index]);
@@ -108,6 +111,21 @@ export function App() {
     credit(a, OPEN);
   };
 
+  const toggleSave = (a: Article) => {
+    const next = new Set(saved);
+    if (!next.delete(a.id)) {
+      next.add(a.id);
+      credit(a, OPEN);
+    }
+    setSaved(next);
+    localStorage.setItem(SAVED_KEY, JSON.stringify([...next]));
+  };
+
+  const less = (a: Article, i: number) => {
+    credit(a, LESS);
+    go(i + 1);
+  };
+
   const go = (i: number) => {
     if (i < 0) return;
     setLimit((n) => (i + 3 >= n ? n + BATCH : n));
@@ -119,7 +137,7 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.altKey || e.ctrlKey || e.metaKey || savedDialog.current?.open) return;
       const el = feed.current;
       if (!el || el.clientHeight === 0) return;
       const current = Math.round(el.scrollTop / el.clientHeight);
@@ -151,12 +169,15 @@ export function App() {
     <>
       <header class="bar">
         <span class="brand">eng shorts</span>
-        <span class="count" aria-live="polite">
-          {Math.min(index + 1, cards.length)} / {cards.length}
+        <span class="right">
+          <button class="pill" onClick={() => savedDialog.current?.showModal()}>saved {saved.size}</button>
+          <span class="count" aria-live="polite">
+            {Math.min(index + 1, cards.length)} / {cards.length}
+          </span>
         </span>
       </header>
       <main class="feed" ref={feed} onScroll={onScroll}>
-        {cards.slice(0, limit).map(({ article: a, why }) => (
+        {cards.slice(0, limit).map(({ article: a, why }, i) => (
           <article class={read.has(a.id) ? 'card is-read' : 'card'} key={a.id} style={{ '--hue': hueOf(a.company) }}>
             <div class="inner">
               <p class="meta">
@@ -174,6 +195,14 @@ export function App() {
               </h2>
               {a.excerpt && <p class="excerpt">{a.excerpt}</p>}
               <span class="cta" aria-hidden="true">{readOn(a.url)}</span>
+              <div class="actions">
+                <button class="pill save" aria-pressed={saved.has(a.id)} onClick={() => toggleSave(a)}>
+                  {saved.has(a.id) ? '★ Saved' : '☆ Save'}
+                </button>
+                <button class="pill less" disabled={settled.get(a.id) === LESS} onClick={() => less(a, i)}>
+                  {settled.get(a.id) === LESS ? 'Showing less' : 'Less like this'}
+                </button>
+              </div>
             </div>
           </article>
         ))}
@@ -190,6 +219,22 @@ export function App() {
           </div>
         </section>}
       </main>
+      <dialog class="saved" ref={savedDialog} onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}>
+        <h2>Saved</h2>
+        {saved.size === 0 && <p class="excerpt">Nothing saved yet. Press Save on a card to keep it here.</p>}
+        <ul>
+          {[...saved].reverse().flatMap((id) => cards.find((c) => c.article.id === id)?.article ?? []).map((a) => (
+            <li key={a.id} style={{ '--hue': hueOf(a.company) }}>
+              <a href={a.url} target="_blank" rel="noopener" onClick={() => markRead(a)}>{a.title}</a>
+              <span class="company">{a.company}</span>
+              <button class="pill" onClick={() => toggleSave(a)}>Remove</button>
+            </li>
+          ))}
+        </ul>
+        <form method="dialog">
+          <button class="pill">Close</button>
+        </form>
+      </dialog>
       <p class="hint" aria-hidden="true">
         ↑ ↓ to move · Enter to open
       </p>

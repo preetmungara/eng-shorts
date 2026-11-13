@@ -1,5 +1,5 @@
 import type { Article } from './types';
-import { OPEN, learn, parseTaste, rankFeed, signalOf, topicsOf } from './rank';
+import { LESS, OPEN, learn, parseTaste, rankFeed, signalOf, topicsOf } from './rank';
 import type { Taste } from './rank';
 
 const NOW = Date.parse('2026-11-12T05:00:00Z');
@@ -101,6 +101,12 @@ for (let n = 0; n < 20; n++) {
   if (ranked.findIndex((c) => c.article.id === ai.id) >= ranked.findIndex((c) => c.article.id === mobile.id)) {
     throw new Error('taste does not lift ai over mobile');
   }
+}
+
+for (let n = 0; n < 20; n++) {
+  const t = learn(taste('less' + n), art('meh' + n, 'Meh', iso(NOW), ['ai']), LESS, NOW);
+  const ranked = rankFeed([art('ai' + n, 'Meh', iso(NOW), ['ai']), art('mob' + n, 'PhoneCo', iso(NOW - 3 * DAY_MS), ['mobile'])], t, new Set(), NOW, DAY);
+  if (ranked[0]?.article.id !== 'mob' + n) throw new Error('less like this does not sink ai from Meh');
 }
 
 const readItems = [
@@ -217,15 +223,14 @@ if (learned.w['t:ai'] !== 3 || learned.w['t:infra'] !== 3 || learned.w['t:devpro
   throw new Error('clamp ' + JSON.stringify(learned.w));
 }
 
-const signals: [number, boolean, number | null][] = [
-  [200, true, null],
-  [1000, true, -0.3],
-  [1000, false, 0],
-  [3000, true, 0],
-  [8000, false, 0.4],
-  [600000, true, 0.4],
+const signals: [number, number | null][] = [
+  [200, null],
+  [1000, 0],
+  [3000, 0],
+  [8000, 0.4],
+  [600000, 0.4],
 ];
-for (const [ms, forward, want] of signals) {
-  const got = signalOf(ms, forward);
-  if (got !== want) throw new Error(`signalOf(${ms}, ${forward}) is ${String(got)}`);
+for (const [ms, want] of signals) {
+  const got = signalOf(ms);
+  if (got !== want) throw new Error(`signalOf(${ms}) is ${String(got)}`);
 }

@@ -2,7 +2,7 @@
 
 Scroll through recent posts from engineering blogs, one card at a time.
 
-Each card shows the company, title, a short excerpt, and a link to the full post. Read posts are remembered in your browser (`localStorage`). Nothing is stored on a server.
+Each card shows the company, title, a short excerpt, and a link to the full post. `Save` keeps a post in the `saved` list for later, and `Less like this` steers the feed away from similar posts. Read and saved posts are remembered in your browser (`localStorage`). Nothing is stored on a server.
 
 The feed is ordered for you, not for everyone. Your reading order comes from what you open and how long you stay on a card, so two readers get different feeds and one reader gets a different feed tomorrow.
 
@@ -20,8 +20,9 @@ A script (`scripts/collect.ts`) runs every 6 hours and builds `public/articles.j
      - *Mixed company blogs* (e.g. Stripe, Cloudflare): must have a technical title and a good score to get in.
    - The score goes up for technical words in the title (latency, Postgres, "how we built…"), code blocks in the post, long posts, and engineering categories. It goes down for marketing words (announcing, pricing, customers…), "how to / top 10" style titles, and short posts.
 3. **Remove duplicates** by URL.
-4. **Rank the catalog.** Posts that did well on Hacker News (20+ points) come first, then newest first. At most 12 posts per company, so no one dominates. This order is the input to the reader, not the order you see.
-5. **Write an excerpt** from the feed. If missing, it is taken from the page's meta description. Excerpts that repeat across many posts are removed.
+4. **Merge with the previous catalog.** Feeds only carry their latest posts, so posts from earlier runs are kept (CI downloads the deployed `articles.json` first). Posts dated before 2005 or in the future are dropped. Sources that fail or keep zero posts show up as warnings on the workflow run.
+5. **Rank the catalog.** Posts that did well on Hacker News (20+ points) come first, then newest first. The reader spreads companies out, so there is no per-company cap here. This order is the input to the reader, not the order you see.
+6. **Write an excerpt** from the feed. If missing, it is taken from the page's meta description. Excerpts that repeat across many posts are removed.
 
 The filter is deliberately strict: missing a good post is cheaper than showing a marketing one.
 
@@ -36,7 +37,7 @@ Each post scores as follows.
 - **Your taste**, up to 1.2 in each direction, from the topics and companies you have engaged with.
 - **A small daily shuffle**, inside ±0.35, seeded from a random id stored on this device and the local date. That is what makes your feed differ from another reader's, and today's feed differ from tomorrow's. The same device gets the same order all day.
 
-Taste comes from three signals. Opening a post counts most. Staying on a card for five seconds or more counts next. Scrolling past a card in under 1.5 seconds counts against its topics, and moving back up is never counted. A post's weight splits across its topics and counts in full for its company. Topic weights fade with a 21-day half-life, so old interests drop out on their own. There is no reset button.
+Taste comes from four signals. Opening or saving a post counts most. Staying on a card for five seconds or more counts next. `Less like this` counts against the post's topics and company as strongly as an open counts for them, moves to the next card, and overrides anything else that card earned. Scrolling past quickly counts for nothing. A post's weight splits across its topics and counts in full for its company. Topic weights fade with a 21-day half-life, so old interests drop out on their own. There is no reset button.
 
 Every fifth card is a `new to you` pick from a topic you have not been scoring, so the feed does not collapse onto one subject. As your taste grows, that slot fills less often, because there are fewer untouched topics to draw from. Posts with no topic word, such as the daily digest, are never picked for it. Cards the reader has opened move to the end of the feed rather than disappearing; the count still covers every post. The feed also caps any 10-card run at 2 posts per company and 4 per topic, so one subject cannot take the top of the feed.
 
@@ -61,7 +62,7 @@ npm run dev       # start the app
 
 Other commands: `npm run build` (type-check and production build), `npm run check` (self-checks for the feed filter and the ranker), and `npx tsx scripts/collect.ts --check` or `npx tsx src/rank.check.ts` to run either check alone.
 
-The reader remembers two keys in `localStorage`. `read-ids` holds the posts you opened. `taste` holds your topic and company weights, the install id, and the last decay timestamp. To start the feed over, delete the `taste` key.
+The reader remembers three keys in `localStorage`. `read-ids` holds the posts you opened. `saved-ids` holds the posts you saved, listed under `saved` in the header. `taste` holds your topic and company weights, the install id, and the last decay timestamp. To start the feed over, delete the `taste` key.
 
 ## License
 

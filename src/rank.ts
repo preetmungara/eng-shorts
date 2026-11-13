@@ -17,11 +17,10 @@ const EXPLORE_EVERY = 5;
 const UNEXPLORED = 0.25;
 const WHY_MIN = 0.3;
 const TRANSIT_MS = 400;
-const SKIP_MS = 1500;
 const DWELL_MS = 5000;
-const SKIP = -0.3;
 const DWELL = 0.4;
 export const OPEN = 1;
+export const LESS = -1;
 
 const TOPICS: [string, RegExp][] = [
   ['ai', /\b(ai|llms?|agents?|agentic|(?:language|frontier|foundation) models?|inference|model training|embeddings?|gpt|machine learning|neural|transformers?|rag|bedrock|gemini|claude|copilot)\b/i],
@@ -107,9 +106,8 @@ export function learn(t: Taste, a: Article, signal: number, now: number): Taste 
   return { ...d, w };
 }
 
-export function signalOf(ms: number, forward: boolean): number | null {
+export function signalOf(ms: number): number | null {
   if (ms < TRANSIT_MS) return null;
-  if (ms < SKIP_MS) return forward ? SKIP : 0;
   if (ms < DWELL_MS) return 0;
   return DWELL;
 }
