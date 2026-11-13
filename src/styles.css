@@ -190,6 +190,7 @@ article.card {
   border-radius: 999px;
   padding: 0.15rem 0.75rem;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .pill:hover:not(:disabled) {

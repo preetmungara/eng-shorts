@@ -7,6 +7,7 @@ const TIMEOUT_MS = 20_000;
 const EXCERPT_MAX = 280;
 const EXCERPT_MIN = 60;
 const MIN_TIME = Date.parse('2005-01-01');
+const FEED_SIZE = 50;
 const UA = 'Mozilla/5.0 (compatible; EngShortsBot/1.0; +https://github.com/)';
 
 type Feed = { company: string; url: string };
@@ -260,6 +261,25 @@ function rankCatalog(articles: Article[], points: Map<string, number>): Article[
   return ranked;
 }
 
+function xml(s: string): string {
+  return s.replace(/[<>&'"]/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+function atom(articles: Article[]): string {
+  const newest = [...articles].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, FEED_SIZE);
+  const entries = newest.map((a) => `<entry><title>${xml(a.title)}</title><link href="${xml(a.url)}"/><id>${xml(a.url)}</id><updated>${a.date}</updated><author><name>${xml(a.company)}</name></author>${a.excerpt ? `<summary>${xml(a.excerpt)}</summary>` : ''}</entry>`);
+  return `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+<title>Eng Shorts</title>
+<subtitle>Engineering blog posts from top companies, without the marketing.</subtitle>
+<id>urn:eng-shorts</id>
+<link rel="self" href="feed.xml"/>
+<updated>${newest[0]?.date ?? new Date(0).toISOString()}</updated>
+${entries.join('\n')}
+</feed>
+`;
+}
+
 // Anthropic's engineering page has no feed; post titles and dates are embedded as JSON in the Next.js payload.
 async function collectAnthropic(feed: Feed): Promise<Article[]> {
   const html = (await get(feed.url)).replace(/\\"/g, '"');
@@ -333,6 +353,13 @@ if (process.argv.includes('--check')) {
   if (sites.join() !== 'reddit.com redditeng,wide.example') throw new Error('sites ' + sites.join());
   if (urlKey('https://old.reddit.com/r/RedditEng/comments/1/a/') !== urlKey('https://www.reddit.com/r/RedditEng/comments/1/a')) throw new Error('old.reddit matches www.reddit');
 
+  const feedXml = atom([
+    { ...draft('x1', 'A&B', 'https://e.example/a?x=1&y=2', '2026-01-01T00:00:00.000Z'), title: '<Fast> & "safe"' },
+    draft('x2', 'Newer', 'https://e.example/b', '2026-02-01T00:00:00.000Z'),
+  ]);
+  if (!feedXml.includes('<title>&#60;Fast&#62; &#38; &#34;safe&#34;</title>') || !feedXml.includes('href="https://e.example/a?x=1&#38;y=2"') || !feedXml.includes('<name>A&#38;B</name>')) throw new Error('atom escapes text and urls');
+  if (feedXml.indexOf('e.example/b') > feedXml.indexOf('e.example/a') || !feedXml.includes('<updated>2026-02-01T00:00:00.000Z</updated>\n<entry>')) throw new Error('atom is newest first');
+
   const now = Date.parse('2026-07-01T00:00:00.000Z');
   const gone = { ...draft('gone', 'Wide', 'https://wide.example/gone', '2026-01-01T00:00:00.000Z'), excerpt: 'kept', hnPoints: 300 };
   const placeholder = draft('ph', 'Wide', 'https://wide.example/ph', '2001-01-01T00:00:00.000Z');
@@ -394,4 +421,5 @@ for (const a of articles) if ((counts.get(a.excerpt) ?? 0) > 2) a.excerpt = '';
 
 await mkdir('public', { recursive: true });
 await writeFile('public/articles.json', JSON.stringify(articles));
+await writeFile('public/feed.xml', atom(articles));
 console.log(`\nwrote ${articles.length} articles to public/articles.json (${prev.length} before, ${fresh.length} from feeds)`);

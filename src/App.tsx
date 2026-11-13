@@ -170,6 +170,7 @@ export function App() {
       <header class="bar">
         <span class="brand">eng shorts</span>
         <span class="right">
+          <a class="pill" href="feed.xml" title="Subscribe in a feed reader">rss</a>
           <button class="pill" onClick={() => savedDialog.current?.showModal()}>saved {saved.size}</button>
           <span class="count" aria-live="polite">
             {Math.min(index + 1, cards.length)} / {cards.length}

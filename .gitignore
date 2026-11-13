@@ -1,4 +1,5 @@
 node_modules
 dist
 public/articles.json
+public/feed.xml
 .cursor/skills/verify-eng-shorts/artifacts/
