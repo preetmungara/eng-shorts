@@ -11,10 +11,10 @@ const collectPath = path.join(repo, 'scripts', 'collect.ts');
 
 const src = readFileSync(collectPath, 'utf8');
 const start = src.indexOf('const MIXED = new Set([');
-const end = src.indexOf('// Self-check:');
+const end = src.indexOf('console.assert(!keep(');
 const signature = 'function keep(feed: Feed, item: Item, raw: string, words: number): boolean';
 if (start < 0 || end < start || !src.slice(start, end).includes(signature)) {
-  console.error('scripts/collect.ts no longer has MIXED and keep() before the self-check. This verifier does not describe the file. Exit 2 is a stale verifier, not a feed finding.');
+  console.error('scripts/collect.ts no longer has MIXED and keep() before the inline asserts. This verifier does not describe the file. Exit 2 is a stale verifier, not a feed finding.');
   process.exit(2);
 }
 const chunk = src.slice(start, end).replace(signature, 'function keep(feed, item, raw, words)');

@@ -40,7 +40,10 @@ const TOPICS: [string, RegExp][] = [
   ['frontend', /\b(frontend|front-end|css|browsers?|react|ui|web performance|rendering)\b/i],
 ];
 
+export const TOPIC_NAMES = TOPICS.map(([topic]) => topic);
+
 export type Taste = { v: 1; id: string; at: number; w: Record<string, number> };
+export type Prefs = { follow: string[]; mute: string[] };
 export type Ranked = { article: Article; why: string | null };
 
 export function topicsOf(a: Pick<Article, 'title' | 'excerpt' | 'company'>): string[] {
@@ -86,6 +89,17 @@ export function parseTaste(raw: string | null, now: number, newId: () => string)
     w[k] = clamp(val);
   }
   return decay({ v: 1, id, at, w }, now);
+}
+
+export function parsePrefs(raw: string | null): Prefs {
+  let data: unknown;
+  try {
+    data = raw == null ? null : JSON.parse(raw);
+  } catch {
+    data = null;
+  }
+  const keys = (v: unknown) => (Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : []);
+  return plain(data) ? { follow: keys(data.follow), mute: keys(data.mute) } : { follow: [], mute: [] };
 }
 
 export function learn(t: Taste, a: Article, signal: number, now: number): Taste {
@@ -158,8 +172,6 @@ function whyOf(s: Scored, w: Record<string, number>): string | null {
 }
 
 function diversify(scored: Scored[], t: Taste): Ranked[] {
-  // ponytail: one linear scan per slot, so O(n^2) over the catalog. Fine at a few hundred posts;
-  // index by company and topic if the feed ever reaches thousands.
   const byTotal = [...scored].sort(by('total'));
   const byBase = [...scored].sort(by('base'));
   const warm = Object.values(t.w).some((v) => v > 0);
@@ -191,8 +203,14 @@ function diversify(scored: Scored[], t: Taste): Ranked[] {
   return out;
 }
 
-export function rankFeed(articles: Article[], taste: Taste, read: ReadonlySet<string>, now: number, day: string): Ranked[] {
-  const unread = articles.filter((a) => !read.has(a.id)).map((a) => score(a, taste, now, day));
-  const readTail = articles.filter((a) => read.has(a.id)).map((a) => ({ article: a, why: null as string | null }));
-  return [...diversify(unread, taste), ...readTail];
+function isMuted(a: Article, mute: readonly string[]): boolean {
+  return mute.includes('c:' + a.company) || topicsOf(a).some((topic) => mute.includes('t:' + topic));
+}
+
+export function rankFeed(articles: Article[], taste: Taste, read: ReadonlySet<string>, now: number, day: string, prefs: Prefs = { follow: [], mute: [] }): Ranked[] {
+  const t = { ...taste, w: { ...taste.w, ...Object.fromEntries(prefs.follow.map((k) => [k, CLAMP])) } };
+  const kept = articles.filter((a) => !isMuted(a, prefs.mute));
+  const unread = kept.filter((a) => !read.has(a.id)).map((a) => score(a, t, now, day));
+  const readTail = kept.filter((a) => read.has(a.id)).map((a) => ({ article: a, why: null as string | null }));
+  return [...diversify(unread, t), ...readTail];
 }

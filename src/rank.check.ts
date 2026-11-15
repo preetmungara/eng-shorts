@@ -1,5 +1,5 @@
 import type { Article } from './types';
-import { LESS, OPEN, learn, parseTaste, rankFeed, signalOf, topicsOf } from './rank';
+import { LESS, OPEN, learn, parsePrefs, parseTaste, rankFeed, signalOf, topicsOf } from './rank';
 import type { Taste } from './rank';
 
 const NOW = Date.parse('2026-11-12T05:00:00Z');
@@ -222,6 +222,14 @@ for (let k = 0; k < 11; k++) learned = learn(learned, multi, OPEN, NOW);
 if (learned.w['t:ai'] !== 3 || learned.w['t:infra'] !== 3 || learned.w['t:devprod'] !== 3 || learned.w['c:Poly'] !== 3) {
   throw new Error('clamp ' + JSON.stringify(learned.w));
 }
+
+const prefPool = [art('pAi', 'Acme', iso(NOW), ['ai']), art('pDb', 'Dbco', iso(NOW), ['databases']), art('pMob', 'Phone', iso(NOW), ['mobile'])];
+const muted = rankFeed(prefPool, taste('prefs'), new Set(['pMob']), NOW, DAY, { follow: [], mute: ['t:databases', 'c:Phone'] });
+if (ids(muted) !== 'pAi') throw new Error('mute kept ' + ids(muted));
+const followed = rankFeed(prefPool, taste('prefs'), new Set(), NOW, DAY, { follow: ['t:ai'], mute: [] });
+if (followed[0]?.article.id !== 'pAi' || followed[0].why !== 'for you: ai') throw new Error('follow did not lift ' + ids(followed));
+if (JSON.stringify(parsePrefs('{"follow":["t:ai",3],"mute":"x"}')) !== '{"follow":["t:ai"],"mute":[]}') throw new Error('prefs not cleaned');
+if (JSON.stringify(parsePrefs('[')) !== '{"follow":[],"mute":[]}') throw new Error('bad prefs not reset');
 
 const signals: [number, number | null][] = [
   [200, null],

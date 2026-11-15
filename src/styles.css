@@ -109,7 +109,6 @@ article.card {
   text-decoration: none;
 }
 
-/* Stretch the link so the whole card is clickable. */
 .title a::after {
   content: '';
   position: absolute;
@@ -202,12 +201,11 @@ article.card {
   opacity: 0.6;
 }
 
-.save[aria-pressed='true'] {
+.pill[aria-pressed='true'] {
   color: var(--accent);
   border-color: var(--accent);
 }
 
-/* Above the stretched title link, so the buttons get the click. */
 .actions {
   position: relative;
   z-index: 1;
@@ -262,6 +260,75 @@ article.card {
   grid-row: 1 / 3;
   grid-column: 2;
   font-size: 0.875rem;
+}
+
+.saved h3 {
+  margin-top: 1.25rem;
+  font-size: 1rem;
+}
+
+.search,
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.search input {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.search input,
+.search select {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.saved .prefs {
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.saved .prefs li {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.prefs span {
+  flex: 1;
+}
+
+.saved .prefs .pill {
+  font-size: 0.8rem;
+}
+
+.you {
+  flex-direction: column;
+}
+
+dialog.you[open] {
+  display: flex;
+  overflow: hidden;
+}
+
+.you .scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.you .scroll h3:first-child {
+  margin-top: 0;
+}
+
+.you .row {
+  margin-bottom: 0;
 }
 
 .hint {

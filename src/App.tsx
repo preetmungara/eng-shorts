@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
-import { LESS, OPEN, learn, parseTaste, rankFeed, signalOf, type Ranked } from './rank';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { LESS, OPEN, TOPIC_NAMES, learn, parsePrefs, parseTaste, rankFeed, signalOf, topicsOf, type Prefs, type Ranked } from './rank';
 import type { Article } from './types';
 
 const READ_KEY = 'read-ids';
 const SAVED_KEY = 'saved-ids';
 const TASTE_KEY = 'taste';
+const PREFS_KEY = 'prefs';
+const MAX_RESULTS = 50;
 const BATCH = 10;
 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -63,26 +65,107 @@ function readOn(url: string): string {
   }
 }
 
+function closeOnBackdrop(e: MouseEvent) {
+  if (e.target === e.currentTarget) (e.currentTarget as HTMLDialogElement).close();
+}
+
+function stringIds(v: unknown): string[] {
+  if (!Array.isArray(v) || v.some((id) => typeof id !== 'string')) throw new Error('bad ids');
+  return v;
+}
+
 export function App() {
+  const [list, setList] = useState<Article[]>([]);
   const [cards, setCards] = useState<Ranked[] | null>(null);
   const [error, setError] = useState(false);
   const [read, setRead] = useState(() => loadIds(READ_KEY));
   const [saved, setSaved] = useState(() => loadIds(SAVED_KEY));
+  const [prefs, setPrefs] = useState(() => parsePrefs(localStorage.getItem(PREFS_KEY)));
   const [index, setIndex] = useState(0);
   const [limit, setLimit] = useState(BATCH);
+  const [query, setQuery] = useState('');
+  const [topic, setTopic] = useState('');
+  const [prefQuery, setPrefQuery] = useState('');
   const feed = useRef<HTMLElement>(null);
   const savedDialog = useRef<HTMLDialogElement>(null);
+  const searchDialog = useRef<HTMLDialogElement>(null);
+  const youDialog = useRef<HTMLDialogElement>(null);
   const shown = useRef({ i: 0, ms: 0, since: performance.now() });
 
   useEffect(() => {
     fetch('articles.json')
       .then((r) => r.json())
       .then((list: Article[]) => {
-        setCards(rankFeed(list, taste, loadIds(READ_KEY), Date.now(), dayKey(Date.now())));
+        setList(list);
+        setCards(rankFeed(list, taste, loadIds(READ_KEY), Date.now(), dayKey(Date.now()), prefs));
         shown.current.since = performance.now();
       })
       .catch(() => setError(true));
   }, []);
+
+  const companies = useMemo(() => [...new Set(list.map((a) => a.company))].sort((a, b) => a.localeCompare(b)), [list]);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q && !topic) return [];
+    return list
+      .filter((a) => (!q || `${a.title} ${a.excerpt} ${a.company}`.toLowerCase().includes(q)) && (!topic || topicsOf(a).includes(topic)))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [list, query, topic]);
+
+  const reorder = (p: Prefs) => {
+    setCards(rankFeed(list, taste, read, Date.now(), dayKey(Date.now()), p));
+    setLimit(BATCH);
+    shown.current = { i: 0, ms: 0, since: performance.now() };
+    setIndex(0);
+  };
+
+  useEffect(() => feed.current?.scrollTo(0, 0), [cards]);
+
+  const togglePref = (key: string, kind: keyof Prefs) => {
+    const other = kind === 'follow' ? 'mute' : 'follow';
+    const on = prefs[kind].includes(key);
+    const next = { [kind]: on ? prefs[kind].filter((k) => k !== key) : [...prefs[kind], key], [other]: prefs[other].filter((k) => k !== key) } as Prefs;
+    setPrefs(next);
+    localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+    reorder(next);
+  };
+
+  const resetTaste = () => {
+    if (!confirm('Forget everything the feed has learned from your reading? Follows and mutes stay.')) return;
+    taste = { ...taste, at: Date.now(), w: {} };
+    settled.clear();
+    localStorage.setItem(TASTE_KEY, JSON.stringify(taste));
+    reorder(prefs);
+  };
+
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify({ read: [...read], saved: [...saved], taste, prefs })], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `eng-shorts-${dayKey(Date.now())}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const importData = async (e: Event) => {
+    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const nextRead = stringIds(data.read);
+      const nextSaved = stringIds(data.saved);
+      const nextTaste = parseTaste(JSON.stringify(data.taste ?? null), Date.now(), newId);
+      const nextPrefs = parsePrefs(JSON.stringify(data.prefs ?? null));
+      localStorage.setItem(READ_KEY, JSON.stringify(nextRead));
+      localStorage.setItem(SAVED_KEY, JSON.stringify(nextSaved));
+      localStorage.setItem(TASTE_KEY, JSON.stringify(nextTaste));
+      localStorage.setItem(PREFS_KEY, JSON.stringify(nextPrefs));
+      location.reload();
+    } catch {
+      alert("That file isn't an Eng Shorts export.");
+    }
+  };
 
   useEffect(() => {
     const s = shown.current;
@@ -137,7 +220,7 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey || e.ctrlKey || e.metaKey || savedDialog.current?.open) return;
+      if (e.altKey || e.ctrlKey || e.metaKey || document.querySelector('dialog[open]')) return;
       const el = feed.current;
       if (!el || el.clientHeight === 0) return;
       const current = Math.round(el.scrollTop / el.clientHeight);
@@ -165,12 +248,22 @@ export function App() {
   if (error) return <p class="status">Couldn't load articles. Try refreshing.</p>;
   if (!cards) return <p class="status">Loading…</p>;
 
+  const needle = prefQuery.trim().toLowerCase();
+  const match = (name: string) => name.toLowerCase().includes(needle);
+  const groups: [string, [string, string][]][] = [
+    ['Topics', TOPIC_NAMES.filter(match).map((t) => ['t:' + t, t])],
+    ['Companies', companies.filter(match).map((c) => ['c:' + c, c])],
+  ];
+  const prefGroups = groups.filter(([, rows]) => rows.length > 0);
+
   return (
     <>
       <header class="bar">
         <span class="brand">eng shorts</span>
         <span class="right">
           <a class="pill" href="feed.xml" title="Subscribe in a feed reader">rss</a>
+          <button class="pill" onClick={() => searchDialog.current?.showModal()}>search</button>
+          <button class="pill" onClick={() => youDialog.current?.showModal()}>you</button>
           <button class="pill" onClick={() => savedDialog.current?.showModal()}>saved {saved.size}</button>
           <span class="count" aria-live="polite">
             {Math.min(index + 1, cards.length)} / {cards.length}
@@ -197,10 +290,10 @@ export function App() {
               {a.excerpt && <p class="excerpt">{a.excerpt}</p>}
               <span class="cta" aria-hidden="true">{readOn(a.url)}</span>
               <div class="actions">
-                <button class="pill save" aria-pressed={saved.has(a.id)} onClick={() => toggleSave(a)}>
+                <button class="pill" aria-pressed={saved.has(a.id)} onClick={() => toggleSave(a)}>
                   {saved.has(a.id) ? '★ Saved' : '☆ Save'}
                 </button>
-                <button class="pill less" disabled={settled.get(a.id) === LESS} onClick={() => less(a, i)}>
+                <button class="pill" disabled={settled.get(a.id) === LESS} onClick={() => less(a, i)}>
                   {settled.get(a.id) === LESS ? 'Showing less' : 'Less like this'}
                 </button>
               </div>
@@ -220,11 +313,71 @@ export function App() {
           </div>
         </section>}
       </main>
-      <dialog class="saved" ref={savedDialog} onClick={(e) => e.target === e.currentTarget && e.currentTarget.close()}>
+      <dialog class="saved" ref={searchDialog} onClick={closeOnBackdrop}>
+        <h2>Search</h2>
+        <div class="search">
+          <input type="search" placeholder="Title, company, or word" value={query} onInput={(e) => setQuery(e.currentTarget.value)} aria-label="Search posts" />
+          <select value={topic} onChange={(e) => setTopic(e.currentTarget.value)} aria-label="Topic">
+            <option value="">All topics</option>
+            {TOPIC_NAMES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        {(query.trim() || topic) && <p class="excerpt">{results.length} posts{results.length > MAX_RESULTS && `, newest ${MAX_RESULTS} shown`}</p>}
+        <ul>
+          {results.slice(0, MAX_RESULTS).map((a) => (
+            <li key={a.id} style={{ '--hue': hueOf(a.company) }}>
+              <a href={a.url} target="_blank" rel="noopener" onClick={() => markRead(a)}>{a.title}</a>
+              <span class="company">{a.company}</span>
+              <button class="pill" aria-pressed={saved.has(a.id)} onClick={() => toggleSave(a)}>{saved.has(a.id) ? '★ Saved' : '☆ Save'}</button>
+            </li>
+          ))}
+        </ul>
+        <form method="dialog">
+          <button class="pill">Close</button>
+        </form>
+      </dialog>
+      <dialog class="saved you" ref={youDialog} onClick={closeOnBackdrop} onClose={() => setPrefQuery('')}>
+        <h2>You</h2>
+        <p class="excerpt">Follow puts a topic or company at full taste. Mute hides it from the feed.</p>
+        <div class="search">
+          <input type="search" placeholder="Filter topics and companies" value={prefQuery} onInput={(e) => setPrefQuery(e.currentTarget.value)} aria-label="Filter topics and companies" autocomplete="off" />
+        </div>
+        <div class="scroll">
+          {prefGroups.length === 0 && <p class="excerpt">Nothing matches.</p>}
+          {prefGroups.map(([heading, rows]) => (
+            <section key={heading}>
+              <h3>{heading}</h3>
+              <ul class="prefs">
+                {rows.map(([key, name]) => (
+                  <li key={key}>
+                    <span>{name}</span>
+                    <button class="pill" aria-pressed={prefs.follow.includes(key)} onClick={() => togglePref(key, 'follow')}>Follow</button>
+                    <button class="pill" aria-pressed={prefs.mute.includes(key)} onClick={() => togglePref(key, 'mute')}>Mute</button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+        <h3>Your data</h3>
+        <p class="excerpt">Everything lives in this browser. Export it to move to another device.</p>
+        <div class="row">
+          <button class="pill" onClick={exportData}>Export</button>
+          <label class="pill">
+            Import
+            <input type="file" accept="application/json,.json" hidden onChange={importData} />
+          </label>
+          <button class="pill" onClick={resetTaste}>Reset learned taste</button>
+          <form method="dialog">
+            <button class="pill" autofocus>Close</button>
+          </form>
+        </div>
+      </dialog>
+      <dialog class="saved" ref={savedDialog} onClick={closeOnBackdrop}>
         <h2>Saved</h2>
         {saved.size === 0 && <p class="excerpt">Nothing saved yet. Press Save on a card to keep it here.</p>}
         <ul>
-          {[...saved].reverse().flatMap((id) => cards.find((c) => c.article.id === id)?.article ?? []).map((a) => (
+          {[...saved].reverse().flatMap((id) => list.find((a) => a.id === id) ?? []).map((a) => (
             <li key={a.id} style={{ '--hue': hueOf(a.company) }}>
               <a href={a.url} target="_blank" rel="noopener" onClick={() => markRead(a)}>{a.title}</a>
               <span class="company">{a.company}</span>

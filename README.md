@@ -2,7 +2,7 @@
 
 Scroll through recent posts from engineering blogs, one card at a time.
 
-Each card shows the company, title, a short excerpt, and a link to the full post. `Save` keeps a post in the `saved` list for later, and `Less like this` steers the feed away from similar posts. Read and saved posts are remembered in your browser (`localStorage`). Nothing is stored on a server.
+Each card shows the company, title, a short excerpt, and a link to the full post. `Save` keeps a post in the `saved` list for later, and `Less like this` steers the feed away from similar posts. `search` finds posts by word, company, or topic and lists the newest 50 matches. `you` lets you follow or mute topics and companies. A filter at the top of that panel narrows the list as you type, and closing the panel clears it. The same panel resets what the feed learned and exports or imports your data as a JSON file, so you can move devices. Export, import, and reset stay on screen while the topic and company list scrolls. Read and saved posts are remembered in your browser (`localStorage`). Nothing is stored on a server.
 
 The feed is ordered for you, not for everyone. Your reading order comes from what you open and how long you stay on a card, so two readers get different feeds and one reader gets a different feed tomorrow.
 
@@ -28,7 +28,7 @@ The filter is deliberately strict: missing a good post is cheaper than showing a
 
 ## How your feed is ordered
 
-`src/rank.ts` orders the catalog once when the page loads, using the catalog and a taste profile in `localStorage` under the key `taste`. The order never changes while you read, so cards do not move under you.
+`src/rank.ts` orders the catalog when the page loads, using the catalog, the taste profile in `localStorage` under the key `taste`, and your follows and mutes under `prefs`. The order stays put while you scroll, so cards do not move under you. Follow, mute, and reset are what reorder it, and each one returns you to the first card.
 
 Each post scores as follows.
 
@@ -37,18 +37,20 @@ Each post scores as follows.
 - **Your taste**, up to 1.2 in each direction, from the topics and companies you have engaged with.
 - **A small daily shuffle**, inside ±0.35, seeded from a random id stored on this device and the local date. That is what makes your feed differ from another reader's, and today's feed differ from tomorrow's. The same device gets the same order all day.
 
-Taste comes from four signals. Opening or saving a post counts most. Staying on a card for five seconds or more counts next. `Less like this` counts against the post's topics and company as strongly as an open counts for them, moves to the next card, and overrides anything else that card earned. Scrolling past quickly counts for nothing. A post's weight splits across its topics and counts in full for its company. Topic weights fade with a 21-day half-life, so old interests drop out on their own. There is no reset button.
+Taste comes from four signals. Opening or saving a post counts most. Staying on a card for five seconds or more counts next. `Less like this` counts against the post's topics and company as strongly as an open counts for them, moves to the next card, and overrides anything else that card earned. Scrolling past quickly counts for nothing. A post's weight splits across its topics and counts in full for its company. Topic weights fade with a 21-day half-life, so old interests drop out on their own. `Reset learned taste` under `you` clears them.
 
-Every fifth card is a `new to you` pick from a topic you have not been scoring, so the feed does not collapse onto one subject. As your taste grows, that slot fills less often, because there are fewer untouched topics to draw from. Posts with no topic word, such as the daily digest, are never picked for it. Cards the reader has opened move to the end of the feed rather than disappearing; the count still covers every post. The feed also caps any 10-card run at 2 posts per company and 4 per topic, so one subject cannot take the top of the feed.
+Follows and mutes are explicit and never fade. A followed topic or company scores at full taste. A muted one is removed from the feed, the count, and the `new to you` slot; saved posts stay in `saved`.
+
+Every fifth card is a `new to you` pick from a topic you have not been scoring, so the feed does not collapse onto one subject. As your taste grows, that slot fills less often, because there are fewer untouched topics to draw from. Posts with no topic word, such as the daily digest, are never picked for it. Cards the reader has opened move to the end of the feed rather than disappearing. The count covers every post that is not muted. The feed also caps any 10-card run at 2 posts per company and 4 per topic, so one subject cannot take the top of the feed.
 
 Two things to know when changing the vocabulary. Topics are tagged in the browser by the `TOPICS` patterns in `src/rank.ts`, matched against title, excerpt, and company. A pattern that matches ordinary English misfiles posts, so prefer the specific word.
 
 ## Technical details
 
 - **Frontend:** Preact + Vite + TypeScript (`src/`). Static site, no backend.
-- **Ranking:** `src/rank.ts` is pure. It takes the catalog, the stored taste, the read ids, the clock, and the local day, and returns the order. `src/App.tsx` owns storage and the dwell timer.
+- **Ranking:** `src/rank.ts` is pure. It takes the catalog, the stored taste, the read ids, the clock, the local day, and your follows and mutes, and returns the order. `src/App.tsx` owns storage, search, and the dwell timer.
 - **Data:** `public/articles.json`, generated by `npm run collect`. Uses `rss-parser`. The same run writes `public/feed.xml`, an Atom feed of the 50 newest posts, linked as `rss` in the header.
-- **Install:** `public/manifest.webmanifest` and `public/icon.svg` make the site installable from the browser. There is no service worker, so it needs a connection.
+- **Install:** `public/manifest.webmanifest` and `public/icon.svg` make the site installable from the browser. `public/sw.js` is a network-first service worker, registered in production builds only, so the reader opens offline with the last catalog it fetched. Publisher pages still need a connection.
 - **Sources:** add or remove blogs in `feeds.json` (`{ "company": "...", "url": "..." }`). If a company posts a lot of marketing, add its name to the `MIXED` list in `scripts/collect.ts`.
 - **Deploy:** GitHub Actions (`.github/workflows/update.yml`) collects, builds, and publishes to GitHub Pages on push to `main`, every 6 hours, or manually.
 - **Requires:** Node 26 or newer.
@@ -63,7 +65,7 @@ npm run dev       # start the app
 
 Other commands: `npm run build` (type-check and production build), `npm run check` (self-checks for the feed filter and the ranker), and `npx tsx scripts/collect.ts --check` or `npx tsx src/rank.check.ts` to run either check alone.
 
-The reader remembers three keys in `localStorage`. `read-ids` holds the posts you opened. `saved-ids` holds the posts you saved, listed under `saved` in the header. `taste` holds your topic and company weights, the install id, and the last decay timestamp. To start the feed over, delete the `taste` key.
+The reader remembers four keys in `localStorage`. `read-ids` holds the posts you opened. `saved-ids` holds the posts you saved, listed under `saved` in the header. `taste` holds your topic and company weights, the install id, and the last decay timestamp. `prefs` holds your follows and mutes as `t:<topic>` and `c:<company>` keys. Export writes all four to one file; import replaces them and reloads.
 
 ## License
 

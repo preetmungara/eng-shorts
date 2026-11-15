@@ -43,7 +43,6 @@ function toText(html = ''): string {
     .trim();
 }
 
-// Skip leading bylines, author lists, and section headings: start at the first paragraph that reads like prose.
 function proseFrom(html: string): string {
   const paras = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map((m) => toText(m[1]));
   const start = paras.findIndex((p) => p.length >= 80 && /[.?!]["')”’]?$/.test(p));
@@ -51,7 +50,6 @@ function proseFrom(html: string): string {
 }
 
 function excerptOf(text: string): string {
-  // Feeds often append boilerplate like "The post X appeared first on Y."
   text = text.replace(/\s*The post .* appeared first on .*$/i, '').replace(/\s*Continue reading.*$/i, '').trim();
   if (text.length < EXCERPT_MIN) return '';
   if (text.length <= EXCERPT_MAX) return text;
@@ -84,15 +82,8 @@ async function pageDate(url: string): Promise<number> {
   }
 }
 
-// Layer 1: tier the sources. Dedicated engineering feeds are trusted; general company
-// blogs (product launches, marketing, company news in the same feed) are mixed and must
-// earn their way in via the scorer below. Precision over recall: a dropped good post
-// costs nothing, a leaked marketing post costs trust.
 const MIXED = new Set(['OpenAI', 'Stripe', 'Cloudflare', 'Discord', 'Figma', 'Hugging Face', 'Nvidia', 'Twilio', 'Docker', 'HashiCorp', 'PlanetScale', 'Supabase', 'Sentry', 'Duolingo', 'AWS News', 'Auth0', 'Cloudera', 'Confluent', 'Databricks', 'Elastic', 'Grafana Labs', 'Heroku', 'HubSpot', 'Okta', 'Postman', 'Red Hat', 'Salesforce', 'Stack Overflow', 'Timescale', 'Zoom', 'eBay']);
 
-// Layer 2: deterministic scorer. Hard-block obvious non-posts for every feed, then score
-// title/categories/url/code/depth. Mixed feeds need a clear technical score; trusted
-// feeds only fall if they are marketing-heavy with no technical signal at all.
 const HARD_BLOCK = /\b(webinar|white ?paper|e-?book|customer stor\w*|case stud\w*|press release|we'?re hiring|now hiring|join us at|acqui(?:res?|sition)|funding round|named (?:a |the )?leader|magic quadrant|book a demo|register now|remarks|keynote|fireside chat)\b/i;
 const MARKETING = /\b(announc\w*|introduc\w*|launch\w*|now available|generally available|new features?|product updates?|pricing|partners?\w*|integrat\w+ with|market\w*|industry|trends?|survey|customers?|business|growth|event|conference|summit|meetup|podcast|celebrat\w*|award\w*|roadmap)\b/i;
 const TECH = /\b(how we|we (?:built|migrated|scaled|reduced|cut|designed|rewrote|shipped)|scaling|scaled|latency|throughput|p99|architecture|distributed|infrastructure|database|postgres|mysql|kafka|kubernetes|performance|optimi[sz]\w*|benchmark\w*|postmortem|outage|reliability|observability|debugging|memory|compiler|runtime|kernel|network\w*|sharding|replication|caching|migration|migrat\w*|internals|inference|training|open source|security|encryption|zero downtime|tracing|profiling|storage|failover|switchover|post-quantum|cryptography|dns|tls|quic|spark|redis|grpc|oauth|load shedding|cascading|embedding|retrieval|tokenization)\b/i;
@@ -104,7 +95,6 @@ function keep(feed: Feed, item: Item, raw: string, words: number): boolean {
   if (HARD_BLOCK.test(`${title} ${cats}`)) return false;
   if (MIXED.has(feed.company) && GENERIC.test(title) && !/^how we\b/i.test(title)) return false;
   let score = 0;
-  // Category/url bonus only counts for mixed feeds: on a trusted feed every post shares the same category, so it proves nothing.
   if (MIXED.has(feed.company) && /engineering|research|architecture|infrastructure|reliability|security/i.test(`${cats} ${item.link ?? ''}`)) score += 3;
   if (MIXED.has(feed.company) && /\b(product|announcements?|company|news|events?|customers?|press|partners?)\b/i.test(cats)) score -= 4;
   if (TECH.test(title)) score += 2;
@@ -113,12 +103,10 @@ function keep(feed: Feed, item: Item, raw: string, words: number): boolean {
   if (GENERIC.test(title) && !/^how we\b/i.test(title)) score -= 3;
   if (words >= 800) score += 1;
   else if (words > 0 && words < 250) score -= 1;
-  // Mixed feeds additionally need a technical title: categories/code alone let product guides through.
   if (MIXED.has(feed.company)) return TECH.test(title) && score >= 3;
   return score >= -1;
 }
 
-// Self-check: marketing from a mixed feed drops, a production deep-dive passes, fluff from a trusted feed drops.
 console.assert(!keep({ company: 'Stripe', url: '' }, { title: 'Announcing new pricing plans for our customers', categories: ['Product'] } as Item, '', 100));
 console.assert(keep({ company: 'Stripe', url: '' }, { title: 'How we migrated Postgres with zero downtime', categories: ['Engineering'] } as Item, '<pre>code</pre>', 1500));
 console.assert(!keep({ company: 'Netflix', url: '' }, { title: 'Announcing our annual customer summit event', categories: [] } as Item, '', 100));
@@ -214,7 +202,6 @@ async function fame(articles: Article[]): Promise<Map<string, number>> {
 }
 
 // Feeds only carry their latest items, so the catalog keeps every post it has ever seen.
-// ponytail: grows without bound (~2k posts a year); prune by age if articles.json or rank.ts diversify gets slow.
 function merge(prev: Article[], fresh: Article[], now: number): Article[] {
   const byKey = new Map(prev.map((a) => [urlKey(a.url), a]));
   for (const a of fresh) {
@@ -414,7 +401,6 @@ for (let i = 0; i < missing.length; i += 8) {
   await Promise.all(missing.slice(i, i + 8).map(async (a) => (a.excerpt = excerptOf(await metaDescription(a.url)))));
 }
 
-// Site-wide meta descriptions repeat across posts and say nothing about the article.
 const counts = new Map<string, number>();
 for (const a of articles) counts.set(a.excerpt, (counts.get(a.excerpt) ?? 0) + 1);
 for (const a of articles) if ((counts.get(a.excerpt) ?? 0) > 2) a.excerpt = '';
