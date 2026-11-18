@@ -46,7 +46,9 @@ export type Taste = { v: 1; id: string; at: number; w: Record<string, number> };
 export type Prefs = { follow: string[]; mute: string[] };
 export type Ranked = { article: Article; why: string | null };
 
-export function topicsOf(a: Pick<Article, 'title' | 'excerpt' | 'company'>): string[] {
+export function topicsOf(a: Pick<Article, 'title' | 'excerpt' | 'company' | 'short'>): string[] {
+  const tags = a.short?.tags?.filter((tag) => TOPIC_NAMES.includes(tag));
+  if (tags?.length) return tags;
   const text = `${a.title} ${a.excerpt} ${a.company}`;
   return TOPICS.filter(([, re]) => re.test(text)).map(([topic]) => topic);
 }

@@ -62,6 +62,14 @@ const digest = topicsOf({
 });
 if (digest.length !== 0) throw new Error('digest has no topic');
 
+const fromShort = topicsOf({
+  title: 'How we migrated Postgres with zero downtime',
+  excerpt: '',
+  company: '',
+  short: { tldr: ['a', 'b', 'c', 'd', 'e'], idea: 'i', tags: ['mobile'], model: 'm', v: 1 },
+});
+if (fromShort.join() !== 'mobile') throw new Error('short tags ignored');
+
 const many = Array.from({ length: 40 }, (_, i) => {
   const names = ['ai', 'infra', 'performance', 'search', 'dataeng', 'security', 'databases', 'reliability', 'distributed', 'observability', 'mobile', 'devprod', 'languages', 'networking', 'frontend'];
   return art(`a${i}`, `C${i % 7}`, iso(NOW - (i % 11) * DAY_MS), [names[i % names.length]], i % 5 === 0 ? 80 : undefined);

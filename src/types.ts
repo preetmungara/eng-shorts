@@ -7,4 +7,5 @@ export type Article = {
   excerpt: string;
   readMins?: number;
   hnPoints?: number;
+  short?: { tldr: string[]; idea: string; tags: string[]; model: string; v: number; thin?: boolean; tries?: number };
 };

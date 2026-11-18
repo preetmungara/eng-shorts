@@ -218,6 +218,17 @@ export function App() {
     cards[i].scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
   };
 
+  const show = (a: Article) => {
+    const i = cards?.findIndex((c) => c.article.id === a.id) ?? -1;
+    if (i < 0) return;
+    setLimit((n) => Math.max(n, i + 1));
+    setIndex(i);
+    searchDialog.current?.close();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      feed.current?.children[i]?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+    }));
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.ctrlKey || e.metaKey || document.querySelector('dialog[open]')) return;
@@ -287,7 +298,14 @@ export function App() {
                   {a.title}
                 </a>
               </h2>
-              {a.excerpt && <p class="excerpt">{a.excerpt}</p>}
+              {a.short ? (
+                <div class="short">
+                  <p class="idea">{a.short.idea}</p>
+                  <ul class="tldr">
+                    {a.short.tldr.map((line, i) => <li key={i}>{line}</li>)}
+                  </ul>
+                </div>
+              ) : a.excerpt && <p class="excerpt">{a.excerpt}</p>}
               <span class="cta" aria-hidden="true">{readOn(a.url)}</span>
               <div class="actions">
                 <button class="pill" aria-pressed={saved.has(a.id)} onClick={() => toggleSave(a)}>
@@ -326,7 +344,7 @@ export function App() {
         <ul>
           {results.slice(0, MAX_RESULTS).map((a) => (
             <li key={a.id} style={{ '--hue': hueOf(a.company) }}>
-              <a href={a.url} target="_blank" rel="noopener" onClick={() => markRead(a)}>{a.title}</a>
+              <a href={a.url} onClick={(e) => { e.preventDefault(); show(a); }}>{a.title}</a>
               <span class="company">{a.company}</span>
               <button class="pill" aria-pressed={saved.has(a.id)} onClick={() => toggleSave(a)}>{saved.has(a.id) ? '★ Saved' : '☆ Save'}</button>
             </li>

@@ -131,6 +131,24 @@ article.card {
   text-wrap: pretty;
 }
 
+.idea {
+  font-size: clamp(1.05rem, 2.6vw, 1.25rem);
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.tldr {
+  margin: 0.75rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.tldr li + li {
+  margin-top: 0.35rem;
+}
+
 .cta {
   display: inline-block;
   margin-top: 2rem;
@@ -149,6 +167,8 @@ article.card {
 
 .is-read .title,
 .is-read .excerpt,
+.is-read .idea,
+.is-read .tldr,
 .is-read .hn {
   opacity: 0.55;
 }
