@@ -44,6 +44,8 @@
   { "company": "Swiggy", "url": "https://medium.com/feed/swiggy-bytes" },
   { "company": "Flipkart", "url": "https://blog.flipkart.tech/feed" },
   { "company": "Zerodha", "url": "https://zerodha.tech/index.xml" },
+  { "company": "Groww", "url": "https://tech.groww.in/feed" },
+  { "company": "Zepto", "url": "https://blog.zepto.com/feed" },
   { "company": "AWS News", "url": "https://aws.amazon.com/blogs/aws/feed/" },
   { "company": "Auth0", "url": "https://auth0.com/blog/rss.xml" },
   { "company": "Confluent", "url": "https://www.confluent.io/rss.xml" },
