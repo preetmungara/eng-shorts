@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "check": "tsx scripts/collect.ts --check && tsx src/rank.check.ts"
+    "check": "node .cursor/skills/verify-feed-keep/check.mjs && tsx scripts/collect.ts --check && tsx src/rank.check.ts"
   },
   "dependencies": {
     "preact": "^10.24.0"

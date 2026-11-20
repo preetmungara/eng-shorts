@@ -14,7 +14,7 @@ A post that should have been dropped shows up in the reader. A marketing or bloc
 - File: `scripts/collect.ts`
 - Function: `keep`
 - Constants the check loads with it: `MIXED`, `HARD_BLOCK`, `MARKETING`, `TECH`, `GENERIC`
-- Last confirmed the check describes that code: commit `2004e2b02d05f9f3378ef75b00258cc3b6b06735`, extracted-source hash `7a46cbfcc6434ee1`
+- Last confirmed the check describes that code: commit `1b4e6340283d9b77a8838d0f98aa7301a89fc4b0`, extracted-source hash `100dd48addad7bc4`
 - Representatives locked by the check: Stripe is mixed, Netflix is trusted
 
 Move the sync commit and the hash forward (`SYNC` and `SOURCE` in `check.mjs`, and the line above) only after you re-read `keep()` at the new commit and the check still describes it. A pass on a stale reading is not a pass on the new code.
@@ -41,7 +41,7 @@ The check also warns on stderr when the extracted `MIXED` / `keep()` source no l
 
 The check calls the real `keep()` loaded from `scripts/collect.ts`. It does not reimplement the function and compare a copy to itself. The decision formula in `check.mjs` is the rule in the sentence above.
 
-It covers every combination of ten title shapes, a hard-blocked and an open title, Stripe and Netflix, four category classes (none, Engineering, Product, both), a plain body and a `<pre>` body, and word counts 0, 249, 250, 799, and 800, plus five named cases: an engineering URL bonus, a category-only webinar block, and the three examples in the self-check above `keep()`.
+It covers every combination of ten title shapes, a hard-blocked and an open title, Stripe and Netflix, four category classes (none, Engineering, Product, both), a plain body and a `<pre>` body, and word counts 0, 249, 250, 799, and 800, plus five named cases: an engineering URL bonus, a category-only webinar block, and the pricing, postgres, and summit titles.
 
 No verifier is installed that can prove this TypeScript for every string. The bound is those signals, which are the inputs `keep()` actually branches on. Outside that bound, and not checked here: feed HTTP, the Anthropic page scraper, `excerptOf`, duplicate-URL removal, and `readMins`.
 

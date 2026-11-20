@@ -4,17 +4,17 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SYNC = '2004e2b02d05f9f3378ef75b00258cc3b6b06735';
-const SOURCE = '7a46cbfcc6434ee1';
+const SYNC = '1b4e6340283d9b77a8838d0f98aa7301a89fc4b0';
+const SOURCE = '100dd48addad7bc4';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const collectPath = path.join(repo, 'scripts', 'collect.ts');
 
 const src = readFileSync(collectPath, 'utf8');
 const start = src.indexOf('const MIXED = new Set([');
-const end = src.indexOf('console.assert(!keep(');
+const end = src.indexOf('const FAME_MIN');
 const signature = 'function keep(feed: Feed, item: Item, raw: string, words: number): boolean';
 if (start < 0 || end < start || !src.slice(start, end).includes(signature)) {
-  console.error('scripts/collect.ts no longer has MIXED and keep() before the inline asserts. This verifier does not describe the file. Exit 2 is a stale verifier, not a feed finding.');
+  console.error('scripts/collect.ts no longer has MIXED and keep() before const FAME_MIN. This verifier does not describe the file. Exit 2 is a stale verifier, not a feed finding.');
   process.exit(2);
 }
 const chunk = src.slice(start, end).replace(signature, 'function keep(feed, item, raw, words)');

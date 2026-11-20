@@ -113,10 +113,6 @@ function keep(feed: Feed, item: Item, raw: string, words: number): boolean {
   return score >= -1;
 }
 
-console.assert(!keep({ company: 'Stripe', url: '' }, { title: 'Announcing new pricing plans for our customers', categories: ['Product'] } as Item, '', 100));
-console.assert(keep({ company: 'Stripe', url: '' }, { title: 'How we migrated Postgres with zero downtime', categories: ['Engineering'] } as Item, '<pre>code</pre>', 1500));
-console.assert(!keep({ company: 'Netflix', url: '' }, { title: 'Announcing our annual customer summit event', categories: [] } as Item, '', 100));
-
 const FAME_MIN = 20;
 const HN_SEARCH = 'https://hn.algolia.com/api/v1/search';
 
@@ -602,6 +598,20 @@ if (process.argv.includes('--check')) {
   if (needsShort({ ...post, short: kept })) throw new Error('current short regenerated');
   if (!sameShorts([post], [{ ...post }])) throw new Error('unchanged catalog looks changed');
   if (sameShorts([post], [{ ...post, short: kept }])) throw new Error('new short looks unchanged');
+
+  if (excerptOf('x'.repeat(59)) !== '') throw new Error('short excerpt kept');
+  const sixty = 'x'.repeat(60);
+  if (excerptOf(sixty) !== sixty) throw new Error('60-char excerpt dropped');
+  if (excerptOf(`${sixty} The post Hello appeared first on Example.`) !== sixty) throw new Error('wordpress footer kept');
+  if (excerptOf(`${sixty} Continue reading the story`) !== sixty) throw new Error('continue reading kept');
+  const sentence = 'We cut tail latency in half. ';
+  const cutAt = excerptOf(sentence.repeat(12));
+  const wantCut = sentence.repeat(8) + 'We cut tail latency in half.';
+  if (cutAt !== wantCut) throw new Error('long excerpt ' + cutAt);
+  const ellipsis = excerptOf(Array.from({ length: 80 }, () => 'latency').join(' '));
+  if (!ellipsis.endsWith('…') || ellipsis.includes('  ')) throw new Error('ellipsis cut ' + ellipsis);
+  if (decode('A &amp; B &#60;tag&#62; &#x22;q&#x22;') !== 'A & B <tag> "q"') throw new Error('decode');
+  if (toText('<style>x</style><p>Hello&nbsp;<b>there</b></p><script>nope</script>') !== 'Hello there') throw new Error('toText');
 
   process.exit(0);
 }
