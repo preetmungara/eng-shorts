@@ -13,6 +13,9 @@
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      if (location.protocol === 'file:' && !/\/dist\/index\.html$/i.test(location.pathname)) location.replace('dist/index.html');
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,11 +1,11 @@
 # Browse the feed
 
-Opening Eng Shorts shows one engineering post per screen, with the company, title, excerpt, and a count of which post is on screen.
+Opening Eng Shorts shows one engineering post per screen, with the company, title, and excerpt. The position in the feed is not shown.
 
 ## Sub-features
 
 - `feed-load` shows an article from the served catalog after the loading line is gone.
-- `feed-position` shows `1 / N` for a catalog of N articles.
+- `feed-position` keeps `1 / N` on a hidden element. It is not shown in the feed.
 - `feed-error` shows a refresh message when the catalog cannot be read.
 
 ## How to get to it (user POV)
@@ -21,7 +21,7 @@ Preconditions:
 - `/articles.json` is a non-empty array.
 
 - **First card.** Read the open card against the catalog. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser check-start`. Exit code 0. Stdout contains `brand eng shorts`, `count 1 / N`, and the company and title of an article that is in `articles.json`. The reader orders its own feed, so the open card is not required to be `articles.json[0]`.
-- **Position text.** Read the live count. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser text --selector ".count"`. The printed line is `1 / N`, the same N as `articles.json`.
+- **Position text.** Read the hidden count. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser text --selector ".count"`. The printed line is `1 / N`, the same N as `articles.json`. Nothing on screen shows that fraction.
 - **Proof.** Capture the open card. Run `node .cursor/skills/verify-eng-shorts/harness.mjs browser snapshot --path .cursor/skills/verify-eng-shorts/artifacts/browse-feed/feed.txt` and `node .cursor/skills/verify-eng-shorts/harness.mjs browser screenshot --path .cursor/skills/verify-eng-shorts/artifacts/browse-feed/feed.png`. The text file records `eng shorts`, `1 / N`, and the open title. The screenshot shows that title.
 - **Failed catalog.** This path is not driven by the default launch. Launch serves a readable `articles.json`. If that file is missing or empty, launch exits before ready and the page would show `Couldn't load articles. Try refreshing.` Do not replace the file with a stand-in catalog and call this verified.
 

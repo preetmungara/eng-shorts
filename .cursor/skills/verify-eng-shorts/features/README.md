@@ -40,7 +40,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 
 ## Features
 
-- [Browse the feed](./browse-feed.md) covers the first card, the position count, and a failed catalog load.
+- [Browse the feed](./browse-feed.md) covers the first card, the hidden position string, and a failed catalog load.
 - [Move between posts](./move-between-posts.md) covers the next and previous keys and the top boundary.
 - [Mark a post read](./mark-read.md) covers the title link, the read tag, and `read-ids`.
 - [Caught up](./caught-up.md) covers the end card and Back to top.

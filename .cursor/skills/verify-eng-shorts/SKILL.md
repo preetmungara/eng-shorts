@@ -31,7 +31,7 @@ The harness turns on `prefers-reduced-motion` before the app loads. The reader r
 node .cursor/skills/verify-eng-shorts/harness.mjs doctor
 ```
 
-Read-only. It checks that the recorded pid is alive, that the port serves `<title>Eng Shorts</title>`, that `/articles.json` is a non-empty array, and that the open page shows brand `eng shorts`, count `1 / N`, and the first served title. There is no auth to check. Run this first whenever the page looks wrong. Do not drive an instance that fails doctor.
+Read-only. It checks that the recorded pid is alive, that the port serves `<title>Eng Shorts</title>`, that `/articles.json` is a non-empty array, and that the open page shows brand `eng shorts` and the first served title. Count `1 / N` is on a hidden element, not on screen. There is no auth to check. Run this first whenever the page looks wrong. Do not drive an instance that fails doctor.
 
 ## Drive
 
@@ -52,7 +52,7 @@ node .cursor/skills/verify-eng-shorts/harness.mjs browser snapshot --path .curso
 node .cursor/skills/verify-eng-shorts/harness.mjs browser screenshot --path .cursor/skills/verify-eng-shorts/artifacts/browse-feed/feed.png
 ```
 
-`check-start` exits non-zero when the open card disagrees with the served `articles.json`. `press` accepts `ArrowDown`, `ArrowUp`, `PageDown`, `PageUp`, `j`, `k`, and `Enter`. Trimmed `.count` text is what the reader is showing. The raw DOM text has surrounding whitespace.
+`check-start` exits non-zero when the open card disagrees with the served `articles.json`. `press` accepts `ArrowDown`, `ArrowUp`, `PageDown`, `PageUp`, `j`, `k`, and `Enter`. Trimmed `.count` text is the hidden position string. The raw DOM text has surrounding whitespace.
 
 Follow `features/` for the full journeys. Keyboard keys and the title link are the user controls. Do not set React state or write `localStorage` except by those controls.
 

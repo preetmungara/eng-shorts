@@ -9,7 +9,7 @@ Choosing a post's title marks it read, shows a read tag on the card, and remembe
 
 ## How to get to it (user POV)
 
-- Choose the post title. The link covers the card, so a click on the card hits the title.
+- Choose the post title, or the "Read on" link under the excerpt. A click on the card background does not open the post.
 - Press `Enter` while focus is on the document body. That activates the same link for the post on screen.
 
 ## Driving it with harness.mjs

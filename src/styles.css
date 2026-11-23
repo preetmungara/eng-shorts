@@ -32,6 +32,7 @@ body {
 }
 
 .feed {
+  position: relative;
   height: 100dvh;
   overflow-y: auto;
   scroll-snap-type: y mandatory;
@@ -49,8 +50,11 @@ body {
   scroll-snap-align: start;
   scroll-snap-stop: always;
   display: grid;
-  place-items: center;
-  padding: 4.5rem 1.5rem 3.5rem;
+  align-items: center;
+  align-items: safe center;
+  justify-items: center;
+  padding: 4rem 1.5rem 3.25rem;
+  overflow: hidden;
   border-bottom: 1px solid var(--line);
 }
 
@@ -61,21 +65,33 @@ article.card {
 .inner {
   width: 100%;
   max-width: 40rem;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.inner::-webkit-scrollbar {
+  display: none;
 }
 
 .meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-  font-size: 0.875rem;
+  align-items: baseline;
+  column-gap: 0.35rem;
+  row-gap: 0.15rem;
+  font-size: 0.8rem;
   color: var(--muted);
+}
+
+.meta > span:not(:last-child)::after {
+  content: ' ·';
 }
 
 .company {
   color: hsl(var(--hue) 80% 28%);
   font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -84,20 +100,8 @@ article.card {
   }
 }
 
-.hn {
-  color: var(--fg);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.tag {
-  padding: 0 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-}
-
 .title {
-  margin: 1rem 0 1.25rem;
+  margin: 0.85rem 0 1rem;
   font-size: clamp(1.75rem, 5vw, 2.75rem);
   line-height: 1.15;
   letter-spacing: -0.02em;
@@ -109,19 +113,9 @@ article.card {
   text-decoration: none;
 }
 
-.title a::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-}
-
 .title a:focus-visible {
-  outline: none;
-}
-
-.title a:focus-visible::after {
   outline: 3px solid var(--accent);
-  outline-offset: -6px;
+  outline-offset: 4px;
 }
 
 .excerpt {
@@ -132,26 +126,25 @@ article.card {
 }
 
 .idea {
-  font-size: clamp(1.05rem, 2.6vw, 1.25rem);
-  line-height: 1.45;
-  font-weight: 700;
+  font-size: clamp(1.05rem, 2.4vw, 1.2rem);
+  line-height: 1.5;
+  font-weight: 600;
 }
 
 .tldr {
-  margin: 0.75rem 0 0;
-  padding-left: 1.2rem;
+  margin: 1rem 0 0;
+  padding-left: 1.15rem;
   font-size: 1rem;
-  line-height: 1.4;
-  color: var(--muted);
+  line-height: 1.5;
 }
 
 .tldr li + li {
-  margin-top: 0.35rem;
+  margin-top: 0.55rem;
 }
 
 .cta {
   display: inline-block;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
   font: inherit;
   font-weight: 600;
   color: var(--accent);
@@ -159,6 +152,7 @@ article.card {
   border: 0;
   padding: 0;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .card:hover .cta {
@@ -168,36 +162,89 @@ article.card {
 .is-read .title,
 .is-read .excerpt,
 .is-read .idea,
-.is-read .tldr,
-.is-read .hn {
+.is-read .tldr {
   opacity: 0.55;
 }
 
 .bar {
   position: fixed;
   inset: 0 0 auto;
-  z-index: 1;
+  z-index: 2;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.5rem;
+  padding: 0.7rem 1.25rem;
   font-size: 0.875rem;
   color: var(--muted);
   pointer-events: none;
+  background: var(--bg);
 }
 
 .brand {
   font-weight: 700;
   color: var(--fg);
+  white-space: nowrap;
 }
 
-.count {
-  font-variant-numeric: tabular-nums;
-}
-
-.right {
+.tools {
+  position: relative;
+  pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 1rem;
+}
+
+.menu-toggle {
+  display: none;
+}
+
+.nav-check {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tools:has(.nav-check:focus-visible) .menu-toggle {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.links {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .menu-toggle {
+    display: inline-block;
+  }
+
+  .links {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.4rem);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    min-width: 9rem;
+    padding: 0.45rem;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+  }
+
+  .nav-check:checked ~ .links {
+    display: flex;
+  }
+}
+
+@media (min-width: 721px) {
+  .nav-check {
+    display: none;
+  }
 }
 
 .pill {
@@ -227,8 +274,6 @@ article.card {
 }
 
 .actions {
-  position: relative;
-  z-index: 1;
   display: flex;
   gap: 0.5rem;
   margin-top: 1.25rem;

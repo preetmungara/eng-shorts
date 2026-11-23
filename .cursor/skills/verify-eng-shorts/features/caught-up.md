@@ -5,7 +5,7 @@ After the last post, the reader shows a caught-up card with how many posts were 
 ## Sub-features
 
 - `end-card` shows `You're caught up.` once every served article has been reachable.
-- `back-to-top` returns to the first post and shows `1 / N` again.
+- `back-to-top` returns to the first post. The hidden position string is `1 / N` again.
 
 ## How to get to it (user POV)
 

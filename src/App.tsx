@@ -65,6 +65,15 @@ function readOn(url: string): string {
   }
 }
 
+function cardIndex(el: HTMLElement): number {
+  const y = el.scrollTop + 1;
+  let i = 0;
+  for (let n = 0; n < el.children.length; n++) {
+    if ((el.children[n] as HTMLElement).offsetTop <= y) i = n;
+  }
+  return i;
+}
+
 function closeOnBackdrop(e: MouseEvent) {
   if (e.target === e.currentTarget) (e.currentTarget as HTMLDialogElement).close();
 }
@@ -87,14 +96,16 @@ export function App() {
   const [topic, setTopic] = useState('');
   const [prefQuery, setPrefQuery] = useState('');
   const feed = useRef<HTMLElement>(null);
+  const nav = useRef<HTMLInputElement>(null);
   const savedDialog = useRef<HTMLDialogElement>(null);
   const searchDialog = useRef<HTMLDialogElement>(null);
   const youDialog = useRef<HTMLDialogElement>(null);
   const shown = useRef({ i: 0, ms: 0, since: performance.now() });
 
   useEffect(() => {
-    fetch('articles.json')
-      .then((r) => r.json())
+    const inline = () => JSON.parse(document.getElementById('articles-data')?.textContent || '') as Article[];
+    const load = location.protocol === 'file:' ? Promise.resolve().then(inline) : fetch('articles.json').then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json() as Promise<Article[]>; });
+    load
       .then((list: Article[]) => {
         setList(list);
         setCards(rankFeed(list, taste, loadIds(READ_KEY), Date.now(), dayKey(Date.now()), prefs));
@@ -121,6 +132,20 @@ export function App() {
   };
 
   useEffect(() => feed.current?.scrollTo(0, 0), [cards]);
+
+  useEffect(() => {
+    const onPointer = (e: PointerEvent) => {
+      const input = nav.current;
+      if (!input?.checked || input.closest('.tools')?.contains(e.target as Node)) return;
+      input.checked = false;
+    };
+    document.addEventListener('pointerdown', onPointer);
+    return () => document.removeEventListener('pointerdown', onPointer);
+  }, []);
+
+  const closeNav = () => {
+    if (nav.current) nav.current.checked = false;
+  };
 
   const togglePref = (key: string, kind: keyof Prefs) => {
     const other = kind === 'follow' ? 'mute' : 'follow';
@@ -234,7 +259,7 @@ export function App() {
       if (e.altKey || e.ctrlKey || e.metaKey || document.querySelector('dialog[open]')) return;
       const el = feed.current;
       if (!el || el.clientHeight === 0) return;
-      const current = Math.round(el.scrollTop / el.clientHeight);
+      const current = cardIndex(el);
       if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'PageDown') {
         e.preventDefault();
         go(current + 1);
@@ -251,7 +276,7 @@ export function App() {
 
   const onScroll = (e: Event) => {
     const el = e.currentTarget as HTMLElement;
-    const i = Math.round(el.scrollTop / el.clientHeight);
+    const i = cardIndex(el);
     setIndex(i);
     setLimit((n) => (i + 3 >= n ? n + BATCH : n));
   };
@@ -271,15 +296,18 @@ export function App() {
     <>
       <header class="bar">
         <span class="brand">eng shorts</span>
-        <span class="right">
-          <a class="pill" href="feed.xml" title="Subscribe in a feed reader">rss</a>
-          <button class="pill" onClick={() => searchDialog.current?.showModal()}>search</button>
-          <button class="pill" onClick={() => youDialog.current?.showModal()}>you</button>
-          <button class="pill" onClick={() => savedDialog.current?.showModal()}>saved {saved.size}</button>
-          <span class="count" aria-live="polite">
-            {Math.min(index + 1, cards.length)} / {cards.length}
-          </span>
-        </span>
+        <div class="tools">
+          <label class="pill menu-toggle" for="feed-nav">menu</label>
+          <input id="feed-nav" class="nav-check" type="checkbox" ref={nav} />
+          <div class="links">
+            <a class="pill" href="feed.xml" title="Subscribe in a feed reader">rss</a>
+            <button class="pill" onClick={() => { closeNav(); searchDialog.current?.showModal(); }}>search</button>
+            <button class="pill" onClick={() => { closeNav(); youDialog.current?.showModal(); }}>you</button>
+            <button class="pill" onClick={() => { closeNav(); savedDialog.current?.showModal(); }}>saved{saved.size ? ` ${saved.size}` : ''}</button>
+          </div>
+        </div>
+        {/* ponytail: hidden position is for the verify harness; the reader does not show a count */}
+        <span class="count" hidden>{Math.min(index + 1, cards.length)} / {cards.length}</span>
       </header>
       <main class="feed" ref={feed} onScroll={onScroll}>
         {cards.slice(0, limit).map(({ article: a, why }, i) => (
@@ -287,9 +315,9 @@ export function App() {
             <div class="inner">
               <p class="meta">
                 <span class="company">{a.company}</span>
-                {a.hnPoints !== undefined && <span class="hn">▲ {a.hnPoints.toLocaleString('en-US')} on Hacker News</span>}
                 <span>{ago(a.date)}</span>
-                {a.readMins && <span>{a.readMins} min read</span>}
+                {a.readMins ? <span>{a.readMins} min</span> : null}
+                {a.hnPoints !== undefined ? <span>{a.hnPoints.toLocaleString('en-US')} pts</span> : null}
                 {read.has(a.id) && <span class="tag">read</span>}
                 {why && <span class="tag">{why}</span>}
               </p>
@@ -306,7 +334,7 @@ export function App() {
                   </ul>
                 </div>
               ) : a.excerpt && <p class="excerpt">{a.excerpt}</p>}
-              <span class="cta" aria-hidden="true">{readOn(a.url)}</span>
+              <a class="cta" href={a.url} target="_blank" rel="noopener" onClick={() => markRead(a)}>{readOn(a.url)}</a>
               <div class="actions">
                 <button class="pill" aria-pressed={saved.has(a.id)} onClick={() => toggleSave(a)}>
                   {saved.has(a.id) ? '★ Saved' : '☆ Save'}

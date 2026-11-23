@@ -1,6 +1,6 @@
 # Move between posts
 
-The reader shows one post at a time. Arrow keys, Page Up and Page Down, and `j` / `k` move to the next or previous post and the count follows.
+The reader shows one post at a time. Arrow keys, Page Up and Page Down, and `j` / `k` move to the next or previous post. The hidden position string follows.
 
 ## Sub-features
 
