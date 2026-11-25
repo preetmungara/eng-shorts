@@ -12,16 +12,17 @@ permissions:
   pages: write
   id-token: write
 
+# One deployment at a time. Do not cancel an in-progress run: Pages deploys
+# must finish, and cancelling between upload and deploy drops the artifact.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      changed: ${{ steps.collect.outputs.changed }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -43,6 +44,14 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
-        if: steps.collect.outputs.changed == 'true'
         uses: actions/deploy-pages@v5
